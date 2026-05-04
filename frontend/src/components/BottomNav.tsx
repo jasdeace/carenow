@@ -1,4 +1,4 @@
-import { Home, HeartPulse, Pill, FileText } from 'lucide-react'
+import { Home, HeartPulse, Pill, FileText, User } from 'lucide-react'
 import { Link, useLocation } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 
@@ -11,6 +11,7 @@ export default function BottomNav() {
     { path: '/vitals', label: t('nav.vitals'), icon: HeartPulse },
     { path: '/medications', label: t('nav.meds'), icon: Pill },
     { path: '/labs', label: t('nav.labs'), icon: FileText },
+    { path: '/profile', label: t('nav.profile'), icon: User },
   ]
 
   return (

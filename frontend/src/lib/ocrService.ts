@@ -8,32 +8,35 @@ interface OCRResult {
 }
 
 export const processImageOCR = async (
-  imageBase64: string,
-  userTier: 'free' | 'premium'
+  imagesBase64: string[],
+  _userTier: 'free' | 'premium'
 ): Promise<OCRResult> => {
-  if (userTier === 'premium') {
-    return processWithGemini(imageBase64);
-  } else {
-    return processWithTesseract(imageBase64);
-  }
+  // For now, always use Gemini for the best experience as Tesseract is unstable for Korean.
+  return processWithGemini(imagesBase64);
 };
 
 /**
  * Free Tier: Runs Tesseract.js directly in the browser
- * No server cost. Lower accuracy on complex documents.
+ * Uses a worker with explicit CDN paths for Korean language support.
  */
-const processWithTesseract = async (imageUrl: string): Promise<OCRResult> => {
+export const _processWithTesseract = async (imageUrl: string): Promise<OCRResult> => {
   console.log('Using Free Tier: Tesseract.js OCR');
   try {
-    // We load both Korean and English language packs
-    const result = await Tesseract.recognize(imageUrl, 'kor+eng', {
-      logger: (m) => console.log('Tesseract Progress:', m),
+    const worker = await Tesseract.createWorker('kor+eng', undefined, {
+      logger: (m) => console.log('Tesseract:', m.status, Math.round((m.progress || 0) * 100) + '%'),
+      workerPath: 'https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/worker.min.js',
+      corePath: 'https://cdn.jsdelivr.net/npm/tesseract.js-core@5/tesseract-core-simd-lstm.wasm.js',
     });
 
+    const result = await worker.recognize(imageUrl);
+    const text = result.data.text;
+    const confidence = result.data.confidence;
+
+    await worker.terminate();
+
     return {
-      rawText: result.data.text,
-      confidence: result.data.confidence,
-      // For free tier, we'd need custom regex here to extract structured data
+      rawText: text,
+      confidence,
       parsedData: null, 
     };
   } catch (error) {
@@ -46,13 +49,13 @@ const processWithTesseract = async (imageUrl: string): Promise<OCRResult> => {
  * Premium Tier: Calls a Supabase Edge Function which uses Gemini API
  * Highly accurate structured JSON extraction.
  */
-const processWithGemini = async (imageBase64: string): Promise<OCRResult> => {
+const processWithGemini = async (imagesBase64: string[]): Promise<OCRResult> => {
   console.log('Using Premium Tier: Gemini AI OCR');
   try {
     // We invoke a Supabase Edge Function (to be created later)
     // that handles the Gemini API call securely.
     const { data, error } = await supabase.functions.invoke('process-ocr-gemini', {
-      body: { imageBase64 },
+      body: { imagesBase64 },
     });
 
     if (error) throw error;
@@ -62,8 +65,8 @@ const processWithGemini = async (imageBase64: string): Promise<OCRResult> => {
       parsedData: data.structuredJson,
       confidence: 99, // Gemini doesn't return raw confidence like Tesseract
     };
-  } catch (error) {
+  } catch (error: any) {
     console.error('Gemini OCR Error:', error);
-    throw new Error('Failed to process image with Premium AI');
+    throw new Error(error.message || 'Failed to process image with Premium AI');
   }
 };

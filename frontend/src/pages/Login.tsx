@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { supabase } from '../lib/supabase'
+import { formatPhone, normalizePhone } from '../lib/phoneUtils'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -10,7 +11,7 @@ import { Label } from '@/components/ui/label'
 export default function Login() {
   const { t } = useTranslation()
   const navigate = useNavigate()
-  const [email, setEmail] = useState('')
+  const [phone, setPhone] = useState('')
   const [password, setPassword] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -19,10 +20,17 @@ export default function Login() {
     e.preventDefault()
     setLoading(true)
     setError(null)
-    const { error } = await supabase.auth.signInWithPassword({ email, password })
+
+    const normalized = normalizePhone(phone)
+    const fakeEmail = `${normalized}@carelink.app`
+
+    const { error } = await supabase.auth.signInWithPassword({ 
+      email: fakeEmail, 
+      password 
+    })
     setLoading(false)
     if (error) {
-      setError(error.message)
+      setError(t('auth.login_failed'))
     } else {
       navigate('/')
     }
@@ -38,23 +46,22 @@ export default function Login() {
         <CardContent>
           <form onSubmit={handleLogin} className="space-y-4">
             <div className="space-y-2">
-              <Label htmlFor="email">{t('auth.email')}</Label>
+              <Label htmlFor="phone">{t('auth.phone')}</Label>
               <Input 
-                id="email" 
-                type="email" 
-                required 
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
+                id="phone" type="tel" required 
+                value={phone}
+                onChange={(e) => setPhone(formatPhone(e.target.value))}
+                placeholder={t('auth.phone_placeholder')}
+                className="h-14 text-lg"
               />
             </div>
             <div className="space-y-2">
               <Label htmlFor="password">{t('auth.password')}</Label>
               <Input 
-                id="password" 
-                type="password" 
-                required 
+                id="password" type="password" required 
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
+                className="h-14 text-lg"
               />
             </div>
             {error && <p className="text-sm text-destructive">{error}</p>}
@@ -64,9 +71,7 @@ export default function Login() {
           </form>
           <div className="mt-4 text-center text-sm">
             {t('auth.no_account')}{' '}
-            <Link to="/signup" className="underline">
-              {t('auth.signup_link')}
-            </Link>
+            <Link to="/signup" className="underline">{t('auth.signup_link')}</Link>
           </div>
         </CardContent>
       </Card>

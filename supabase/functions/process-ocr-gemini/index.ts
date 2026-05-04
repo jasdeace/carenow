@@ -1,35 +1,44 @@
+// @ts-ignore
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
+
+// @ts-ignore
+declare const Deno: any;
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 }
 
-serve(async (req) => {
+serve(async (req: Request) => {
   // Handle CORS preflight
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders })
   }
 
   try {
-    const { imageBase64 } = await req.json()
+    const { imageBase64, imagesBase64 } = await req.json()
+    const images = imagesBase64 || (imageBase64 ? [imageBase64] : [])
     
-    if (!imageBase64) {
-      throw new Error("Missing imageBase64 payload")
+    if (images.length === 0) {
+      throw new Error("Missing images payload")
     }
 
-    // Strip out data:image/jpeg;base64, prefix if present
-    const base64Data = imageBase64.replace(/^data:image\/\w+;base64,/, "")
+    const imageParts = images.map((b64: string) => ({
+      inline_data: {
+        mime_type: "image/jpeg",
+        data: b64.replace(/^data:image\/\w+;base64,/, "")
+      }
+    }))
 
     const GEMINI_API_KEY = Deno.env.get('GEMINI_API_KEY')
     if (!GEMINI_API_KEY) {
       throw new Error("GEMINI_API_KEY is not set in Edge Function secrets")
     }
 
-    const geminiEndpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${GEMINI_API_KEY}`
+    const geminiEndpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite-preview:generateContent?key=${GEMINI_API_KEY}`
 
     const prompt = `
-      You are a highly accurate medical OCR assistant. Your job is to extract text from the provided image of a lab result or medication prescription. 
+      You are a highly accurate medical OCR assistant. Your job is to extract text from the provided image(s) of a lab result or medication prescription. 
       The text might be in English or Korean. Ensure you accurately extract both languages.
       
       If it looks like a Medication Prescription/Label, extract the medication name and dosage amount.
@@ -38,8 +47,10 @@ serve(async (req) => {
       Respond ONLY with a valid JSON object matching this structure:
       {
         "type": "medication" | "lab_result" | "unknown",
+        "reportDate": "YYYY-MM-DD or null",
         "medicationName": "string or null",
         "dosageAmount": "string or null",
+        "dosageUnit": "string or null",
         "metrics": { "metricName": "value" },
         "rawTextSummary": "A brief summary of what the document is."
       }
@@ -55,12 +66,7 @@ serve(async (req) => {
           {
             parts: [
               { text: prompt },
-              {
-                inline_data: {
-                  mime_type: "image/jpeg",
-                  data: base64Data
-                }
-              }
+              ...imageParts
             ]
           }
         ],
@@ -78,8 +84,11 @@ serve(async (req) => {
     }
 
     // Extract the JSON string from Gemini's response
-    const jsonString = geminiData.candidates?.[0]?.content?.parts?.[0]?.text || "{}"
-    let structuredJson = {}
+    let jsonString = geminiData.candidates?.[0]?.content?.parts?.[0]?.text || "{}"
+    // Strip markdown formatting if Gemini included it
+    jsonString = jsonString.replace(/```json/gi, '').replace(/```/g, '').trim()
+    
+    let structuredJson = null
     try {
       structuredJson = JSON.parse(jsonString)
     } catch (e) {
@@ -94,8 +103,9 @@ serve(async (req) => {
     })
 
   } catch(error) {
-    console.error("Edge Function Error:", error.message)
-    return new Response(JSON.stringify({ error: error.message }), { 
+    const err = error as Error;
+    console.error("Edge Function Error:", err.message)
+    return new Response(JSON.stringify({ error: err.message }), { 
       headers: { ...corsHeaders, 'Content-Type': 'application/json' }, 
       status: 400 
     })

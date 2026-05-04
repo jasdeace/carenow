@@ -26,11 +26,15 @@ export default function Onboarding() {
     
     setLoading(true)
     setError(null)
+
+    // Extract phone from the auth metadata (set during signup)
+    const phoneFromAuth = user.user_metadata?.phone_kr || ''
     
     const { error } = await supabase
       .from('users')
       .update({
         name_ko: name,
+        phone_kr: phoneFromAuth,
         role: role
       })
       .eq('id', user.id)
@@ -71,13 +75,14 @@ export default function Onboarding() {
                 value={name}
                 onChange={(e) => setName(e.target.value)}
                 placeholder={t('auth.name_placeholder')}
+                className="h-14 text-lg"
               />
             </div>
             
             <div className="space-y-2">
               <Label htmlFor="role">{t('auth.role')}</Label>
               <Select value={role} onValueChange={setRole} required>
-                <SelectTrigger id="role">
+                <SelectTrigger id="role" className="h-14 text-lg">
                   <SelectValue placeholder={t('auth.role_placeholder')} />
                 </SelectTrigger>
                 <SelectContent>

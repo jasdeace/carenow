@@ -2,17 +2,36 @@
   "welcome": "Welcome to CareLink",
   "common": {
     "loading": "Loading...",
-    "save": "Save & Continue"
+    "save": "Save",
+    "save_continue": "Save & Continue",
+    "connect": "Connect",
+    "cancel": "Cancel",
+    "confirm": "Confirm",
+    "accept": "Accept",
+    "done": "Done",
+    "pending": "Pending",
+    "new": "New",
+    "undo": "Undo",
+    "delete": "Delete"
   },
   "auth": {
     "login_title": "Login",
-    "login_desc": "Welcome back to CareLink",
+    "login_desc": "Log in with your phone number",
     "login_btn": "Login",
     "signup_title": "Create Account",
-    "signup_desc": "Join CareLink to stay connected",
+    "signup_desc": "Sign up with your phone number",
     "signup_btn": "Sign Up",
-    "email": "Email",
+    "phone": "Phone Number",
+    "phone_placeholder": "010-XXXX-XXXX",
     "password": "Password",
+    "password_placeholder": "Min 6 characters",
+    "confirm_password": "Confirm Password",
+    "confirm_password_placeholder": "Re-enter password",
+    "password_mismatch": "Passwords do not match",
+    "password_too_short": "Password must be at least 6 characters",
+    "invalid_phone": "Enter a valid phone number",
+    "already_registered": "This number is already registered",
+    "login_failed": "Invalid phone number or password",
     "no_account": "Don't have an account?",
     "signup_link": "Sign up here",
     "has_account": "Already have an account?",
@@ -24,13 +43,15 @@
     "role_placeholder": "Select your role"
   },
   "roles": {
-    "loved_one": "I receive care",
-    "caregiver": "I am a caregiver"
+    "loved_one": "I receive care (Taker)",
+    "caregiver": "I am a caregiver (Giver)"
   },
   "home": {
     "greeting_morning": "Good morning, {{name}}",
     "greeting_afternoon": "Good afternoon, {{name}}",
     "greeting_evening": "Good evening, {{name}}",
+    "taker_tab": "My Health",
+    "giver_tab": "Caregiving",
     "meds_title": "Today's Medications",
     "meds_empty": "No medications scheduled for today.",
     "took_it": "I took it ✓",
@@ -43,10 +64,11 @@
     "sos_confirm_title": "Trigger Emergency SOS?",
     "sos_confirm_desc": "This will immediately notify your care circle.",
     "sos_cancel": "Cancel",
-    "sos_trigger": "Yes, Help Me"
+    "sos_trigger": "Yes, Help Me",
+    "weekly_progress": "Weekly Progress"
   },
   "caregiver": {
-    "dashboard_title": "Caregiver Dashboard",
+    "dashboard_title": "Dashboard",
     "todays_status": "Today's Status",
     "checkin_status": "Check-in",
     "meds_taken": "Meds Taken",
@@ -62,17 +84,66 @@
     "tab_overview": "Overview",
     "tab_health": "Health",
     "tab_circle": "Circle",
-    "connect_title": "Connect to your Loved One",
-    "connect_desc": "Enter the unique Circle Code to securely access their health dashboard.",
+    "connect_title": "Connect to a Taker",
+    "connect_desc": "Enter their phone number or Circle Code to connect securely.",
     "invite_code_placeholder": "Circle ID (e.g., 550e8400-e29b-...)",
     "connect_btn": "Connect securely",
-    "join_error": "Failed to join circle"
+    "join_error": "Failed to join circle",
+    "my_takers": "My Takers",
+    "no_takers": "You haven't connected to any Takers yet.",
+    "no_takers_hint": "Enter their phone number below to connect!",
+    "view_dashboard": "View Dashboard",
+    "connect_new": "Connect New Taker",
+    "connect_new_desc": "Enter their phone number to link accounts.",
+    "active_meds": "Active Medications",
+    "awaiting_acceptance": "Awaiting Taker Acceptance",
+    "no_active_meds": "No active medications yet.",
+    "add_medication": "Add Medication",
+    "med_name": "Medication Name",
+    "dosage": "Dosage",
+    "unit": "Unit",
+    "taken": "Taken",
+    "overview": "Overview",
+    "no_activity": "No activity yet."
+  },
+  "profile": {
+    "title": "Profile",
+    "subtitle": "Manage your account and connections.",
+    "my_info": "My Info",
+    "name": "Name",
+    "role": "Role",
+    "role_taker": "Taker",
+    "role_giver": "Giver",
+    "phone": "Phone Number",
+    "email": "Email (Optional)",
+    "email_placeholder": "email@example.com (optional)",
+    "email_hint": "Email is optional. You can add it for notifications.",
+    "circle_code": "Circle Code",
+    "circle_code_desc": "Share this code with your Giver to connect.",
+    "signout": "Sign Out",
+    "save": "Save",
+    "phone_saved": "Phone number saved!",
+    "email_saved": "Email saved!",
+    "language": "Language",
+    "language_ko": "한국어",
+    "language_en": "English",
+    "giver_added_meds": "Meds Added by Giver",
+    "vitals_settings": "Vitals Display Settings",
+    "show_bp": "Blood Pressure",
+    "show_glucose": "Glucose",
+    "show_weight": "Weight",
+    "change_role": "Change Role",
+    "who_sees": "Who sees my health data",
+    "no_viewers": "No one is connected yet.",
+    "remove_viewer": "Remove",
+    "removed": "Connection removed."
   },
   "nav": {
     "home": "Home",
     "vitals": "Vitals",
     "meds": "Meds",
-    "labs": "Labs"
+    "labs": "Labs",
+    "profile": "Profile"
   },
   "vitals": {
     "title": "Record Vitals",
@@ -101,9 +172,13 @@
     "scan_desc": "Take a photo to auto-fill details",
     "med_name": "Medication Name",
     "dosage_amt": "Amount",
-    "dosage_unit": "Unit (e.g., pill)",
+    "dosage_unit": "Unit (e.g., mg, pill)",
     "empty": "No medications found. Add one to get started.",
-    "ocr_failed": "Failed to read text. Please enter manually."
+    "ocr_failed": "Failed to read text. Please enter manually.",
+    "manual_tab": "Manual Entry",
+    "scan_tab": "Scan",
+    "add_btn": "Add Medication",
+    "accept_failed": "Failed to accept medication"
   },
   "labs": {
     "title": "Lab Results",
@@ -114,6 +189,7 @@
     "analyzing": "AI is analyzing the document...",
     "review_desc": "Review and edit the extracted text before saving:",
     "empty": "No lab results uploaded yet.",
-    "ocr_failed": "Failed to analyze document. Please try again."
+    "ocr_failed": "Failed to analyze document. Please try again.",
+    "result_date": "Result: {{date}}"
   }
 }

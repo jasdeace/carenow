@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { supabase } from '../lib/supabase'
+import { formatPhone, normalizePhone } from '../lib/phoneUtils'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -10,22 +11,49 @@ import { Label } from '@/components/ui/label'
 export default function Signup() {
   const { t } = useTranslation()
   const navigate = useNavigate()
-  const [email, setEmail] = useState('')
+  const [phone, setPhone] = useState('')
   const [password, setPassword] = useState('')
+  const [confirmPassword, setConfirmPassword] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   const handleSignup = async (e: React.FormEvent) => {
     e.preventDefault()
-    setLoading(true)
     setError(null)
-    const { error } = await supabase.auth.signUp({ 
-      email, 
-      password 
+
+    if (password !== confirmPassword) {
+      setError(t('auth.password_mismatch'))
+      return
+    }
+    if (password.length < 6) {
+      setError(t('auth.password_too_short'))
+      return
+    }
+
+    const normalized = normalizePhone(phone)
+    if (!normalized || normalized.length < 10) {
+      setError(t('auth.invalid_phone'))
+      return
+    }
+
+    setLoading(true)
+    const fakeEmail = `${normalized}@carelink.app`
+    
+    const { error: signupError } = await supabase.auth.signUp({ 
+      email: fakeEmail, 
+      password,
+      options: {
+        data: { phone_kr: normalized }
+      }
     })
+    
     setLoading(false)
-    if (error) {
-      setError(error.message)
+    if (signupError) {
+      if (signupError.message.includes('already registered')) {
+        setError(t('auth.already_registered'))
+      } else {
+        setError(signupError.message)
+      }
     } else {
       navigate('/onboarding')
     }
@@ -41,23 +69,33 @@ export default function Signup() {
         <CardContent>
           <form onSubmit={handleSignup} className="space-y-4">
             <div className="space-y-2">
-              <Label htmlFor="email">{t('auth.email')}</Label>
+              <Label htmlFor="phone">{t('auth.phone')}</Label>
               <Input 
-                id="email" 
-                type="email" 
-                required 
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
+                id="phone" type="tel" required 
+                value={phone}
+                onChange={(e) => setPhone(formatPhone(e.target.value))}
+                placeholder={t('auth.phone_placeholder')}
+                className="h-14 text-lg"
               />
             </div>
             <div className="space-y-2">
               <Label htmlFor="password">{t('auth.password')}</Label>
               <Input 
-                id="password" 
-                type="password" 
-                required 
+                id="password" type="password" required 
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
+                placeholder={t('auth.password_placeholder')}
+                className="h-14 text-lg"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="confirmPassword">{t('auth.confirm_password')}</Label>
+              <Input 
+                id="confirmPassword" type="password" required 
+                value={confirmPassword}
+                onChange={(e) => setConfirmPassword(e.target.value)}
+                placeholder={t('auth.confirm_password_placeholder')}
+                className="h-14 text-lg"
               />
             </div>
             {error && <p className="text-sm text-destructive">{error}</p>}
@@ -67,9 +105,7 @@ export default function Signup() {
           </form>
           <div className="mt-4 text-center text-sm">
             {t('auth.has_account')}{' '}
-            <Link to="/login" className="underline">
-              {t('auth.login_btn')}
-            </Link>
+            <Link to="/login" className="underline">{t('auth.login_btn')}</Link>
           </div>
         </CardContent>
       </Card>

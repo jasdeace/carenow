@@ -1,12 +1,13 @@
-import { useState, useRef } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useAuthStore } from '../stores/authStore'
 import { processImageOCR } from '../lib/ocrService'
+import { api } from '../lib/api'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
 import { Textarea } from '@/components/ui/textarea'
-import { FileText, Plus, Camera, Loader2, Save } from 'lucide-react'
+import { FileText, Plus, Camera, Loader2, Save, Trash2, MessageSquare, Send } from 'lucide-react'
 
 export default function LabResults() {
   const { t } = useTranslation()
@@ -17,53 +18,216 @@ export default function LabResults() {
   const [ocrLoading, setOcrLoading] = useState(false)
   const [ocrText, setOcrText] = useState('')
   
+  const [chatLab, setChatLab] = useState<any>(null)
+  const [chatInput, setChatInput] = useState('')
+  const [chatHistory, setChatHistory] = useState<{role: 'user'|'ai', text: string}[]>([])
+  const [isChatting, setIsChatting] = useState(false)
+  
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const chatScrollRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (profile?.loved_one_id) loadLabs()
+  }, [profile?.loved_one_id])
+
+  useEffect(() => {
+    if (chatScrollRef.current) {
+      chatScrollRef.current.scrollTop = chatScrollRef.current.scrollHeight
+    }
+  }, [chatHistory])
+
+  const loadLabs = async () => {
+    if (!profile?.loved_one_id) return
+    try {
+      const data = await api.getLabResults(profile.loved_one_id)
+      setLabs(data.map((d: any) => ({
+        id: d.id,
+        date: d.recorded_at,
+        content: d.raw_content,
+        parsedData: d.parsed_data,
+        chat_history: d.chat_history
+      })))
+    } catch (e) {
+      console.error(e)
+    }
+  }
+
+  const compressImage = (file: File): Promise<string> => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader()
+      reader.readAsDataURL(file)
+      reader.onload = (event) => {
+        const img = new Image()
+        img.src = event.target?.result as string
+        img.onload = () => {
+          const canvas = document.createElement('canvas')
+          const MAX_WIDTH = 1600
+          const MAX_HEIGHT = 1600
+          let width = img.width
+          let height = img.height
+
+          if (width > height) {
+            if (width > MAX_WIDTH) {
+              height *= MAX_WIDTH / width
+              width = MAX_WIDTH
+            }
+          } else {
+            if (height > MAX_HEIGHT) {
+              width *= MAX_HEIGHT / height
+              height = MAX_HEIGHT
+            }
+          }
+
+          canvas.width = width
+          canvas.height = height
+          const ctx = canvas.getContext('2d')
+          ctx?.drawImage(img, 0, 0, width, height)
+          
+          // Compress quality to 0.7 to significantly reduce payload size
+          const dataUrl = canvas.toDataURL('image/jpeg', 0.7)
+          resolve(dataUrl)
+        }
+        img.onerror = reject
+      }
+      reader.onerror = reject
+    })
+  }
 
   const handleImageCapture = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0]
-    if (!file) return
+    const files = Array.from(e.target.files || [])
+    if (files.length === 0) return
 
     setOcrLoading(true)
     setOcrText('')
 
     try {
-      const reader = new FileReader()
-      reader.onloadend = async () => {
-        const base64String = reader.result as string
-        
-        // Use premium for high quality extraction if subscribed, else free (Tesseract)
-        const tier = profile?.tier === 'premium' ? 'premium' : 'free'
-        try {
-          const result = await processImageOCR(base64String, tier)
-          
-          // Since this is lab results, we dump the text to a textarea for manual review/editing
-          if (result.parsedData) {
-            setOcrText(JSON.stringify(result.parsedData, null, 2))
-          } else {
-            setOcrText(result.rawText)
-          }
-        } catch (err) {
-          console.error('OCR failed', err)
-          alert(t('labs.ocr_failed'))
-        } finally {
-          setOcrLoading(false)
-        }
+      const base64Strings = await Promise.all(files.map(file => compressImage(file)))
+      const tier = profile?.tier === 'premium' ? 'premium' : 'free'
+      
+      const result = await processImageOCR(base64Strings, tier)
+      
+      if (result.parsedData) {
+        setOcrText(JSON.stringify(result.parsedData, null, 2))
+      } else {
+        setOcrText(result.rawText)
       }
-      reader.readAsDataURL(file)
-    } catch (err) {
-      console.error(err)
+    } catch (err: any) {
+      console.error('OCR failed', err)
+      alert(`OCR Failed: ${err?.message || JSON.stringify(err)}`)
+    } finally {
       setOcrLoading(false)
     }
   }
 
-  const handleSaveLab = () => {
-    // Optimistic save
-    setLabs([
-      ...labs, 
-      { id: Math.random().toString(), date: new Date().toISOString().split('T')[0], content: ocrText }
-    ])
-    setIsUploadOpen(false)
-    setOcrText('')
+  const handleSaveLab = async () => {
+    if (!profile?.loved_one_id) return
+    let parsedContent = null
+    try {
+      parsedContent = JSON.parse(ocrText)
+    } catch (e) {
+      console.warn('Could not parse OCR text as JSON')
+    }
+
+    let reportDate = new Date().toISOString().split('T')[0]
+    if (parsedContent?.reportDate && parsedContent.reportDate !== 'null' && parsedContent.reportDate.trim() !== '') {
+      // Validate date format roughly (YYYY-MM-DD)
+      if (/^\d{4}-\d{2}-\d{2}$/.test(parsedContent.reportDate)) {
+        reportDate = parsedContent.reportDate
+      }
+    }
+
+    try {
+      await api.saveLabResult(profile.loved_one_id, reportDate, ocrText, parsedContent)
+      setIsUploadOpen(false)
+      setOcrText('')
+      loadLabs()
+    } catch (e: any) {
+      console.error(e)
+      alert(`Failed to save lab result. Error: ${e?.message || JSON.stringify(e)}`)
+    }
+  }
+
+  const handleDeleteLab = async (id: string) => {
+    if (!confirm('정말 삭제하시겠습니까?')) return
+    try {
+      await api.deleteLabResult(id)
+      loadLabs()
+    } catch (e) {
+      console.error(e)
+    }
+  }
+
+  const handleAskAI = async () => {
+    if (!chatInput.trim() || !chatLab) return
+    const userMsg = chatInput
+    
+    const newHistoryUser = [...chatHistory, { role: 'user', text: userMsg }] as any
+    setChatHistory(newHistoryUser)
+    setChatInput('')
+    setIsChatting(true)
+    
+    try {
+      const reply = await api.askAI(userMsg, chatLab.parsedData || chatLab.content, chatHistory)
+      const finalHistory = [...newHistoryUser, { role: 'ai', text: reply }] as any
+      setChatHistory(finalHistory)
+      
+      // Save to database
+      await api.updateLabResultChat(chatLab.id, finalHistory)
+      setLabs(prev => prev.map(l => l.id === chatLab.id ? { ...l, chat_history: finalHistory } : l))
+      setChatLab((prev: any) => ({ ...prev, chat_history: finalHistory }))
+    } catch (e) {
+      console.error(e)
+      setChatHistory(prev => [...prev, { role: 'ai', text: '오류가 발생했습니다. 다시 시도해주세요.' }])
+    } finally {
+      setIsChatting(false)
+    }
+  }
+
+  let previewData: any = null
+  let normalizedPreviewMetrics: Record<string, string> | null = null
+
+  const normalizeMetrics = (metricsRaw: any): Record<string, string> | null => {
+    if (!metricsRaw) return null
+    if (typeof metricsRaw === 'string') return { 'Result': metricsRaw }
+    if (Array.isArray(metricsRaw)) {
+      return metricsRaw.reduce((acc: any, curr: any) => {
+        if (typeof curr === 'object' && curr !== null) {
+          if (curr.metricName && curr.value !== undefined) acc[curr.metricName] = String(curr.value)
+          else if (curr.name && curr.value !== undefined) acc[curr.name] = String(curr.value)
+          else {
+            Object.entries(curr).forEach(([k, v]) => acc[k] = String(v))
+          }
+        }
+        return acc
+      }, {})
+    }
+    if (typeof metricsRaw === 'object') {
+      const res: Record<string, string> = {}
+      Object.entries(metricsRaw).forEach(([k, v]) => {
+        res[k] = typeof v === 'object' ? JSON.stringify(v) : String(v)
+      })
+      return Object.keys(res).length > 0 ? res : null
+    }
+    return null
+  }
+
+  if (ocrText && !ocrLoading) {
+    try {
+      previewData = JSON.parse(ocrText)
+      normalizedPreviewMetrics = normalizeMetrics(previewData?.metrics || previewData)
+      // If it parsed the whole object, let's filter out known non-metric keys if metrics wasn't explicitly provided
+      if (!previewData?.metrics && normalizedPreviewMetrics) {
+        delete normalizedPreviewMetrics.type
+        delete normalizedPreviewMetrics.reportDate
+        delete normalizedPreviewMetrics.medicationName
+        delete normalizedPreviewMetrics.rawTextSummary
+        delete normalizedPreviewMetrics.dosageAmount
+        delete normalizedPreviewMetrics.dosageUnit
+        if (Object.keys(normalizedPreviewMetrics).length === 0) {
+          normalizedPreviewMetrics = null
+        }
+      }
+    } catch (e) {}
   }
 
   return (
@@ -91,7 +255,7 @@ export default function LabResults() {
                   <input 
                     type="file" 
                     accept="image/*" 
-                    capture="environment" 
+                    multiple
                     className="hidden" 
                     ref={fileInputRef}
                     onChange={handleImageCapture}
@@ -119,12 +283,37 @@ export default function LabResults() {
               {ocrText && !ocrLoading && (
                 <div className="space-y-4 flex-1">
                   <p className="text-sm font-medium">{t('labs.review_desc')}</p>
-                  <Textarea 
-                    value={ocrText} 
-                    onChange={e => setOcrText(e.target.value)}
-                    className="min-h-[300px] text-sm p-4"
-                  />
-                  <Button onClick={handleSaveLab} className="w-full h-16 text-xl rounded-xl flex gap-2 mt-4">
+                  
+                  {normalizedPreviewMetrics ? (
+                    <div className="border rounded-xl overflow-hidden bg-background shadow-sm">
+                      <div className="flex justify-between px-4 py-3 bg-secondary/20 border-b">
+                        <span className="text-sm font-medium text-muted-foreground">검사명</span>
+                        <span className="text-sm font-medium text-muted-foreground">수치</span>
+                      </div>
+                      <div className="divide-y max-h-[50vh] overflow-y-auto">
+                        {Object.entries(normalizedPreviewMetrics).map(([key, val]: [string, any]) => {
+                          const strVal = String(val)
+                          const isAbnormal = strVal.includes(' H ') || strVal.includes(' L ') || strVal.endsWith(' H') || strVal.endsWith(' L') || strVal.includes(' H') || strVal.includes(' L')
+                          return (
+                            <div key={key} className="flex justify-between items-center px-4 py-3 bg-card hover:bg-secondary/10 transition-colors">
+                              <span className="text-sm font-medium text-foreground">{key}</span>
+                              <span className={`text-sm ${isAbnormal ? 'text-destructive font-bold' : 'text-muted-foreground'}`}>
+                                {strVal}
+                              </span>
+                            </div>
+                          )
+                        })}
+                      </div>
+                    </div>
+                  ) : (
+                    <Textarea 
+                      value={ocrText} 
+                      onChange={e => setOcrText(e.target.value)}
+                      className="min-h-[300px] text-sm p-4 font-mono bg-secondary/10"
+                    />
+                  )}
+
+                  <Button onClick={handleSaveLab} className="w-full h-16 text-xl rounded-xl flex gap-2 mt-4 shadow-md hover:shadow-lg transition-all">
                     <Save className="w-6 h-6" />
                     {t('common.save')}
                   </Button>
@@ -146,23 +335,123 @@ export default function LabResults() {
           </Card>
         ) : (
           labs.map(lab => (
-            <Card key={lab.id} className="rounded-2xl shadow-sm border-0 bg-background">
-              <CardHeader className="pb-2">
+            <Card key={lab.id} className="rounded-2xl shadow-sm border-0 bg-background overflow-hidden relative">
+              <CardHeader className="pb-3 bg-secondary/20 flex flex-row justify-between items-center pr-2">
                 <CardTitle className="text-lg flex items-center gap-2">
                   <FileText className="w-5 h-5 text-primary" />
-                  Result: {lab.date}
+                  {lab.date}
                 </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="bg-secondary/30 p-3 rounded-lg text-sm max-h-32 overflow-hidden relative">
-                  {lab.content.slice(0, 150)}...
-                  <div className="absolute bottom-0 left-0 right-0 h-12 bg-gradient-to-t from-secondary/30 to-transparent" />
+                <div className="flex items-center">
+                  <Button variant="ghost" size="icon" className="h-10 w-10 text-primary/80" onClick={() => {
+                    setChatLab(lab)
+                    setChatHistory(lab.chat_history || [{ role: 'ai', text: '무엇이든 물어보세요! 이 검사 결과에 대해 설명해드릴 수 있습니다.' }])
+                  }}>
+                    <MessageSquare className="w-5 h-5" />
+                  </Button>
+                  <Button variant="ghost" size="icon" className="h-10 w-10 text-destructive/60 hover:text-destructive" onClick={() => handleDeleteLab(lab.id)}>
+                    <Trash2 className="w-5 h-5" />
+                  </Button>
                 </div>
+              </CardHeader>
+              <CardContent className="pt-2 p-0">
+                {(() => {
+                  let normMetrics = normalizeMetrics(lab.parsedData?.metrics)
+                  if (!normMetrics && lab.parsedData) {
+                    normMetrics = normalizeMetrics(lab.parsedData)
+                    if (normMetrics) {
+                      delete normMetrics.type
+                      delete normMetrics.reportDate
+                      delete normMetrics.medicationName
+                      delete normMetrics.rawTextSummary
+                      delete normMetrics.dosageAmount
+                      delete normMetrics.dosageUnit
+                      if (Object.keys(normMetrics).length === 0) normMetrics = null
+                    }
+                  }
+                  
+                  if (normMetrics) {
+                    return (
+                      <div className="flex flex-col divide-y divide-border/50">
+                        <div className="flex justify-between px-4 py-2 bg-secondary/5">
+                          <span className="text-xs text-muted-foreground font-medium">검사명</span>
+                          <span className="text-xs text-muted-foreground font-medium">수치</span>
+                        </div>
+                        {Object.entries(normMetrics).map(([key, val]: [string, any]) => {
+                          const strVal = String(val)
+                          const isAbnormal = strVal.includes(' H ') || strVal.includes(' L ') || strVal.endsWith(' H') || strVal.endsWith(' L') || strVal.includes(' H') || strVal.includes(' L')
+                          return (
+                            <div key={key} className="flex justify-between items-center px-4 py-3">
+                              <span className="text-sm font-medium text-foreground">{key}</span>
+                              <span className={`text-sm ${isAbnormal ? 'text-destructive font-bold' : 'text-muted-foreground'}`}>
+                                {strVal}
+                              </span>
+                            </div>
+                          )
+                        })}
+                      </div>
+                    )
+                  } else {
+                    return (
+                      <div className="p-4 mx-4 mb-4 bg-secondary/30 rounded-lg text-sm max-h-32 overflow-hidden relative">
+                        {lab.content.slice(0, 150)}...
+                        <div className="absolute bottom-0 left-0 right-0 h-12 bg-gradient-to-t from-secondary/30 to-transparent" />
+                      </div>
+                    )
+                  }
+                })()}
               </CardContent>
             </Card>
           ))
         )}
       </div>
+      
+      <Dialog open={!!chatLab} onOpenChange={(open) => !open && setChatLab(null)}>
+        <DialogContent className="w-11/12 rounded-2xl max-h-[85vh] flex flex-col p-0 overflow-hidden">
+          <DialogHeader className="p-4 border-b bg-secondary/10 shrink-0">
+            <DialogTitle className="text-xl flex items-center gap-2">
+              <MessageSquare className="w-5 h-5 text-primary" />
+              AI 검사결과 분석
+            </DialogTitle>
+          </DialogHeader>
+          <div ref={chatScrollRef} className="flex-1 overflow-y-auto p-4 space-y-4">
+            {chatHistory.map((msg, idx) => (
+              <div key={idx} className={`flex w-full ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+                <div className={`max-w-[85%] rounded-2xl p-3 text-sm whitespace-pre-wrap ${
+                  msg.role === 'user' ? 'bg-primary text-primary-foreground rounded-tr-sm' : 'bg-secondary/40 text-foreground rounded-tl-sm'
+                }`}>
+                  {msg.text}
+                </div>
+              </div>
+            ))}
+            {isChatting && (
+              <div className="flex w-full justify-start">
+                <div className="max-w-[85%] rounded-2xl p-3 text-sm bg-secondary/40 rounded-tl-sm flex gap-1 items-center">
+                  <span className="w-2 h-2 bg-primary/50 rounded-full animate-bounce" />
+                  <span className="w-2 h-2 bg-primary/50 rounded-full animate-bounce delay-75" />
+                  <span className="w-2 h-2 bg-primary/50 rounded-full animate-bounce delay-150" />
+                </div>
+              </div>
+            )}
+          </div>
+          <div className="p-3 border-t bg-background shrink-0 flex items-center gap-2">
+            <Textarea 
+              value={chatInput} 
+              onChange={e => setChatInput(e.target.value)} 
+              onKeyDown={e => {
+                if (e.key === 'Enter' && !e.shiftKey) {
+                  e.preventDefault()
+                  handleAskAI()
+                }
+              }}
+              placeholder="질문을 입력하세요..." 
+              className="min-h-[48px] max-h-32 resize-none rounded-xl"
+            />
+            <Button size="icon" onClick={handleAskAI} disabled={!chatInput.trim() || isChatting} className="w-12 h-12 rounded-full shrink-0">
+              <Send className="w-5 h-5" />
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

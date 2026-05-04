@@ -8,32 +8,57 @@ import { Card, CardContent } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
-import { Pill, Plus, Camera, Loader2 } from 'lucide-react'
+import { Badge } from '@/components/ui/badge'
+import { Pill, Plus, Camera, Loader2, Check, Trash2 } from 'lucide-react'
 
 export default function Medications() {
   const { t } = useTranslation()
   const { profile } = useAuthStore()
   
   const [meds, setMeds] = useState<any[]>([])
+  const [pendingMeds, setPendingMeds] = useState<any[]>([])
   const [isAddOpen, setIsAddOpen] = useState(false)
 
   // Add Med Form State
   const [medName, setMedName] = useState('')
   const [dosageAmt, setDosageAmt] = useState('')
-  const [dosageUnit, setDosageUnit] = useState('정')
+  const [dosageUnit, setDosageUnit] = useState('mg')
   const [ocrLoading, setOcrLoading] = useState(false)
   
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
-    if (profile?.id) loadMeds()
-  }, [profile?.id])
+    if (profile?.loved_one_id) loadMeds()
+  }, [profile?.loved_one_id])
 
   const loadMeds = async () => {
-    if (!profile?.id) return
+    if (!profile?.loved_one_id) return
     try {
-      const data = await api.getMedications(profile.id)
-      setMeds(data || [])
+      const [activeData, pendingData] = await Promise.all([
+        api.getMedications(profile.loved_one_id),
+        api.getPendingMedications(profile.loved_one_id)
+      ])
+      setMeds(activeData || [])
+      setPendingMeds(pendingData || [])
+    } catch (e) {
+      console.error(e)
+    }
+  }
+
+  const handleAcceptMed = async (medId: string) => {
+    try {
+      await api.acceptMedication(medId)
+      loadMeds() // Refresh both lists
+    } catch (err: any) {
+      console.error(err)
+      alert(`Failed to accept medication: ${err.message || 'Unknown error'}`)
+    }
+  }
+
+  const handleDeleteMed = async (medId: string) => {
+    try {
+      await api.deleteMedication(medId)
+      loadMeds()
     } catch (e) {
       console.error(e)
     }
@@ -41,17 +66,21 @@ export default function Medications() {
 
   const handleManualAdd = async (e: React.FormEvent) => {
     e.preventDefault()
-    // For MVP, we'd add to the database here using a new api method
-    // Optimistic update
-    setMeds([...meds, { 
-      id: Math.random().toString(), 
-      name_ko: medName, 
-      dosage_amount: Number(dosageAmt), 
-      dosage_unit: dosageUnit,
-      is_active: true
-    }])
-    setIsAddOpen(false)
-    setMedName(''); setDosageAmt(''); setDosageUnit('정')
+    if (!profile?.loved_one_id) {
+      alert('Error: No active care profile found. If you are a caregiver, please add medications via the Giver Dashboard.');
+      return;
+    }
+    try {
+      console.log('Attempting to save medication:', { medName, dosageAmt, dosageUnit });
+      await api.addMedication(profile.loved_one_id, medName, String(dosageAmt), dosageUnit, profile.id)
+      setIsAddOpen(false)
+      setMedName(''); setDosageAmt(''); setDosageUnit('mg')
+      alert('새로운 약이 추가되었습니다.');
+      await loadMeds() // Refresh real data
+    } catch (err: any) {
+      console.error(err)
+      alert(`Failed to add medication: ${err.message || 'Unknown error'}`)
+    }
   }
 
   const handleImageCapture = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -69,12 +98,13 @@ export default function Medications() {
         const tier = profile?.tier === 'premium' ? 'premium' : 'free'
         
         try {
-          const result = await processImageOCR(base64String, tier)
+          const result = await processImageOCR([base64String], tier)
           
           // Basic heuristic to extract med name from raw text for MVP
           if (result.parsedData) {
             setMedName(result.parsedData.medicationName || '')
             setDosageAmt(result.parsedData.dosageAmount || '')
+            setDosageUnit(result.parsedData.dosageUnit || 'mg')
           } else {
             // Very rough Tesseract fallback parse
             const text = result.rawText
@@ -86,6 +116,10 @@ export default function Medications() {
           alert(t('meds.ocr_failed'))
         } finally {
           setOcrLoading(false)
+          setTimeout(() => {
+            document.getElementById('medName')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            document.getElementById('medName')?.focus();
+          }, 300);
         }
       }
       reader.readAsDataURL(file)
@@ -146,17 +180,40 @@ export default function Medications() {
               {/* Manual Form */}
               <form onSubmit={handleManualAdd} className="space-y-4">
                 <div className="space-y-2">
-                  <Label>{t('meds.med_name')}</Label>
-                  <Input required value={medName} onChange={e => setMedName(e.target.value)} className="h-14 text-lg" />
+                  <Label htmlFor="medName">{t('meds.med_name')}</Label>
+                  <Input 
+                    id="medName"
+                    name="medName"
+                    required 
+                    value={medName} 
+                    onChange={e => setMedName(e.target.value)} 
+                    className="h-14 text-lg" 
+                  />
                 </div>
                 <div className="flex gap-4">
                   <div className="space-y-2 flex-1">
-                    <Label>{t('meds.dosage_amt')}</Label>
-                    <Input required type="number" value={dosageAmt} onChange={e => setDosageAmt(e.target.value)} className="h-14 text-lg" />
+                    <Label htmlFor="dosageAmt">{t('meds.dosage_amt')}</Label>
+                    <Input 
+                      id="dosageAmt"
+                      name="dosageAmt"
+                      required 
+                      type="text" 
+                      value={dosageAmt} 
+                      onChange={e => setDosageAmt(e.target.value)} 
+                      className="h-14 text-lg" 
+                      placeholder="e.g. 10 or 10/60" 
+                    />
                   </div>
                   <div className="space-y-2 flex-1">
-                    <Label>{t('meds.dosage_unit')}</Label>
-                    <Input required value={dosageUnit} onChange={e => setDosageUnit(e.target.value)} className="h-14 text-lg" />
+                    <Label htmlFor="dosageUnit">{t('meds.dosage_unit')}</Label>
+                    <Input 
+                      id="dosageUnit"
+                      name="dosageUnit"
+                      required 
+                      value={dosageUnit} 
+                      onChange={e => setDosageUnit(e.target.value)} 
+                      className="h-14 text-lg" 
+                    />
                   </div>
                 </div>
                 <Button type="submit" className="w-full h-16 text-xl rounded-xl mt-4">
@@ -170,7 +227,37 @@ export default function Medications() {
       </div>
 
       <div className="space-y-4 pb-20">
-        {meds.length === 0 ? (
+        {/* Pending Meds from Giver */}
+        {pendingMeds.length > 0 && (
+          <div className="space-y-3">
+            <h2 className="text-lg font-semibold text-yellow-600 flex items-center gap-2">
+              <Badge variant="outline" className="bg-yellow-500/10 text-yellow-600 border-yellow-500/20">{t('common.new')}</Badge>
+              {t('profile.giver_added_meds')}
+            </h2>
+            {pendingMeds.map(med => (
+              <Card key={med.id} className="rounded-2xl shadow-sm border-2 border-yellow-500/30 bg-yellow-50/50 dark:bg-yellow-950/10">
+                <CardContent className="p-4 flex items-center justify-between">
+                  <div className="flex items-center gap-4">
+                    <div className="w-12 h-12 rounded-full bg-yellow-500/10 flex items-center justify-center text-yellow-600">
+                      <Pill className="w-6 h-6" />
+                    </div>
+                    <div>
+                      <h3 className="text-xl font-medium">{med.name_ko || med.name_en}</h3>
+                      <p className="text-muted-foreground">{med.dosage_amount}{med.dosage_unit}</p>
+                    </div>
+                  </div>
+                  <Button onClick={() => handleAcceptMed(med.id)} size="sm" className="h-10 px-4 gap-1">
+                    <Check className="w-4 h-4" />
+                    {t('common.accept')}
+                  </Button>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        )}
+
+        {/* Active Meds */}
+        {meds.length === 0 && pendingMeds.length === 0 ? (
           <Card className="bg-background border-dashed shadow-none">
             <CardContent className="flex flex-col items-center justify-center p-8 text-center space-y-2 text-muted-foreground">
               <Pill className="w-12 h-12 opacity-20" />
@@ -190,6 +277,9 @@ export default function Medications() {
                     <p className="text-muted-foreground">{med.dosage_amount}{med.dosage_unit}</p>
                   </div>
                 </div>
+                <Button variant="ghost" size="icon" onClick={() => handleDeleteMed(med.id)} className="text-destructive hover:text-destructive hover:bg-destructive/10">
+                  <Trash2 className="w-5 h-5" />
+                </Button>
               </CardContent>
             </Card>
           ))

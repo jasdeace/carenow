@@ -6,12 +6,13 @@ import { supabase } from './lib/supabase'
 import Login from './pages/Login'
 import Signup from './pages/Signup'
 import Onboarding from './pages/Onboarding'
-import LovedOneHome from './pages/LovedOneHome'
-import CaregiverDashboard from './pages/CaregiverDashboard'
+import UnifiedHome from './pages/UnifiedHome'
+import GiverDashboard from './pages/GiverDashboard'
 import BottomNav from './components/BottomNav'
 import Vitals from './pages/Vitals'
 import Medications from './pages/Medications'
 import LabResults from './pages/LabResults'
+import Profile from './pages/Profile'
 
 function ProtectedRoute({ children, requireProfile = true }: { children: React.ReactNode, requireProfile?: boolean }) {
   const { user, profile, isLoading } = useAuthStore()
@@ -25,17 +26,13 @@ function ProtectedRoute({ children, requireProfile = true }: { children: React.R
   return <>{children}</>
 }
 
-function RoleBasedLayout() {
-  const { profile } = useAuthStore()
-  if (profile?.role === 'loved_one') {
-    return (
-      <div className="pb-16">
-        <Outlet />
-        <BottomNav />
-      </div>
-    )
-  }
-  return <CaregiverDashboard />
+function AppLayout() {
+  return (
+    <div className="pb-16">
+      <Outlet />
+      <BottomNav />
+    </div>
+  )
 }
 
 function App() {
@@ -64,12 +61,14 @@ function App() {
         <Route path="/signup" element={<Signup />} />
         <Route path="/onboarding" element={<ProtectedRoute requireProfile={false}><Onboarding /></ProtectedRoute>} />
         
-        <Route element={<ProtectedRoute requireProfile={true}><RoleBasedLayout /></ProtectedRoute>}>
-          <Route path="/" element={<LovedOneHome />} />
+        <Route element={<ProtectedRoute requireProfile={true}><AppLayout /></ProtectedRoute>}>
+          <Route path="/" element={<UnifiedHome />} />
           <Route path="/vitals" element={<Vitals />} />
           <Route path="/medications" element={<Medications />} />
           <Route path="/labs" element={<LabResults />} />
+          <Route path="/profile" element={<Profile />} />
         </Route>
+        <Route path="/giver/dashboard/:takerId" element={<ProtectedRoute requireProfile={true}><GiverDashboard /></ProtectedRoute>} />
       </Routes>
     </BrowserRouter>
   )

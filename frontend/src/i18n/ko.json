@@ -2,17 +2,36 @@
   "welcome": "케어링크에 오신 것을 환영합니다",
   "common": {
     "loading": "로딩 중...",
-    "save": "저장하고 계속하기"
+    "save": "저장",
+    "save_continue": "저장하고 계속하기",
+    "connect": "연결하기",
+    "cancel": "취소",
+    "confirm": "확인",
+    "accept": "수락",
+    "done": "완료",
+    "pending": "대기 중",
+    "new": "새로운",
+    "undo": "복용 취소",
+    "delete": "삭제"
   },
   "auth": {
     "login_title": "로그인",
-    "login_desc": "케어링크에 오신 것을 환영합니다",
+    "login_desc": "휴대폰 번호로 로그인하세요",
     "login_btn": "로그인",
     "signup_title": "회원가입",
-    "signup_desc": "가족과 연결되는 첫 걸음",
+    "signup_desc": "휴대폰 번호로 가입하세요",
     "signup_btn": "회원가입",
-    "email": "이메일",
+    "phone": "휴대폰 번호",
+    "phone_placeholder": "010-XXXX-XXXX",
     "password": "비밀번호",
+    "password_placeholder": "6자 이상",
+    "confirm_password": "비밀번호 확인",
+    "confirm_password_placeholder": "비밀번호 재입력",
+    "password_mismatch": "비밀번호가 일치하지 않습니다",
+    "password_too_short": "비밀번호는 6자 이상이어야 합니다",
+    "invalid_phone": "올바른 전화번호를 입력하세요",
+    "already_registered": "이미 가입된 번호입니다",
+    "login_failed": "전화번호 또는 비밀번호가 잘못되었습니다",
     "no_account": "계정이 없으신가요?",
     "signup_link": "회원가입하기",
     "has_account": "이미 계정이 있으신가요?",
@@ -24,13 +43,15 @@
     "role_placeholder": "역할을 선택해주세요"
   },
   "roles": {
-    "loved_one": "저는 돌봄을 받아요",
-    "caregiver": "저는 돌보는 사람이에요"
+    "loved_one": "저는 돌봄을 받아요 (Taker)",
+    "caregiver": "저는 돌보는 사람이에요 (Giver)"
   },
   "home": {
     "greeting_morning": "좋은 아침입니다, {{name}}님",
     "greeting_afternoon": "좋은 오후입니다, {{name}}님",
     "greeting_evening": "좋은 저녁입니다, {{name}}님",
+    "taker_tab": "내 건강",
+    "giver_tab": "돌봄",
     "meds_title": "오늘의 약",
     "meds_empty": "오늘 복용할 약이 없습니다.",
     "took_it": "복용했어요 ✓",
@@ -43,10 +64,11 @@
     "sos_confirm_title": "긴급 SOS를 보내시겠습니까?",
     "sos_confirm_desc": "가족들에게 즉시 알림이 전송됩니다.",
     "sos_cancel": "취소",
-    "sos_trigger": "네, 도와주세요"
+    "sos_trigger": "네, 도와주세요",
+    "weekly_progress": "주간 복용 기록"
   },
   "caregiver": {
-    "dashboard_title": "보호자 대시보드",
+    "dashboard_title": "대시보드",
     "todays_status": "오늘의 현황",
     "checkin_status": "체크인",
     "meds_taken": "약 복용률",
@@ -63,16 +85,65 @@
     "tab_health": "건강",
     "tab_circle": "그룹",
     "connect_title": "돌보미 연결하기",
-    "connect_desc": "돌보실 분의 초대 코드를 입력하여 안전하게 연결하세요.",
+    "connect_desc": "돌보실 분의 전화번호나 초대 코드를 입력하여 연결하세요.",
     "invite_code_placeholder": "초대 코드 (예: 550e8400-e29b-...)",
     "connect_btn": "연결하기",
-    "join_error": "연결에 실패했습니다"
+    "join_error": "연결에 실패했습니다",
+    "my_takers": "나의 Taker 목록",
+    "no_takers": "아직 연결된 Taker가 없습니다.",
+    "no_takers_hint": "아래에 전화번호를 입력하여 연결하세요!",
+    "view_dashboard": "대시보드 보기",
+    "connect_new": "새로운 Taker 연결",
+    "connect_new_desc": "전화번호를 입력하여 연결하세요.",
+    "active_meds": "활성 약",
+    "awaiting_acceptance": "Taker 수락 대기 중",
+    "no_active_meds": "아직 등록된 약이 없습니다.",
+    "add_medication": "약 추가",
+    "med_name": "약 이름",
+    "dosage": "복용량",
+    "unit": "단위",
+    "taken": "복용 완료",
+    "overview": "요약",
+    "no_activity": "아직 활동이 없습니다."
+  },
+  "profile": {
+    "title": "프로필",
+    "subtitle": "계정 및 연결을 관리하세요.",
+    "my_info": "내 정보",
+    "name": "이름",
+    "role": "역할",
+    "role_taker": "Taker (돌봄 받는 분)",
+    "role_giver": "Giver (돌봄 제공자)",
+    "phone": "전화번호",
+    "email": "이메일 (선택사항)",
+    "email_placeholder": "email@example.com (선택사항)",
+    "email_hint": "이메일은 선택사항입니다. 알림 수신용으로 추가할 수 있습니다.",
+    "circle_code": "초대 코드",
+    "circle_code_desc": "이 코드를 Giver에게 공유하여 연결하세요.",
+    "signout": "로그아웃",
+    "save": "저장",
+    "phone_saved": "전화번호가 저장되었습니다!",
+    "email_saved": "이메일이 저장되었습니다!",
+    "language": "언어 설정",
+    "language_ko": "한국어",
+    "language_en": "English",
+    "giver_added_meds": "Giver가 추가한 약",
+    "vitals_settings": "건강수치 표시 설정",
+    "show_bp": "혈압",
+    "show_glucose": "혈당",
+    "show_weight": "체중",
+    "change_role": "역할 변경",
+    "who_sees": "내 건강 데이터를 보는 사람",
+    "no_viewers": "아직 연결된 사람이 없습니다.",
+    "remove_viewer": "연결 해제",
+    "removed": "연결이 해제되었습니다."
   },
   "nav": {
     "home": "홈",
     "vitals": "건강수치",
     "meds": "나의 약",
-    "labs": "검사결과"
+    "labs": "검사결과",
+    "profile": "프로필"
   },
   "vitals": {
     "title": "건강수치 기록",
@@ -101,9 +172,13 @@
     "scan_desc": "사진을 찍으면 자동으로 입력됩니다",
     "med_name": "약 이름",
     "dosage_amt": "복용량",
-    "dosage_unit": "단위 (예: 정, 포)",
+    "dosage_unit": "단위 (예: mg, 정)",
     "empty": "등록된 약이 없습니다. 새 약을 추가해보세요.",
-    "ocr_failed": "글자를 인식하지 못했습니다. 직접 입력해주세요."
+    "ocr_failed": "글자를 인식하지 못했습니다. 직접 입력해주세요.",
+    "manual_tab": "직접 입력",
+    "scan_tab": "촬영 인식",
+    "add_btn": "약 추가하기",
+    "accept_failed": "약 수락에 실패했습니다"
   },
   "labs": {
     "title": "검사 결과",
@@ -114,6 +189,7 @@
     "analyzing": "AI가 문서를 분석하고 있습니다...",
     "review_desc": "추출된 내용을 확인하고 필요하다면 수정 후 저장하세요:",
     "empty": "등록된 검사 결과가 없습니다.",
-    "ocr_failed": "문서 분석에 실패했습니다. 다시 시도해주세요."
+    "ocr_failed": "문서 분석에 실패했습니다. 다시 시도해주세요.",
+    "result_date": "결과: {{date}}"
   }
 }
