@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
 import { Textarea } from '@/components/ui/textarea'
-import { FileText, Plus, Camera, Loader2, Save, Trash2, MessageSquare, Send } from 'lucide-react'
+import { FileText, Plus, Camera, Loader2, Save, Trash2, MessageSquare, Send, ChevronDown, ChevronUp } from 'lucide-react'
 
 export default function LabResults() {
   const { t } = useTranslation()
@@ -22,6 +22,8 @@ export default function LabResults() {
   const [chatInput, setChatInput] = useState('')
   const [chatHistory, setChatHistory] = useState<{role: 'user'|'ai', text: string}[]>([])
   const [isChatting, setIsChatting] = useState(false)
+  const [manualDate, setManualDate] = useState('')
+  const [expandedLabs, setExpandedLabs] = useState<Set<string>>(new Set())
   
   const fileInputRef = useRef<HTMLInputElement>(null)
   const chatScrollRef = useRef<HTMLDivElement>(null)
@@ -61,8 +63,8 @@ export default function LabResults() {
         img.src = event.target?.result as string
         img.onload = () => {
           const canvas = document.createElement('canvas')
-          const MAX_WIDTH = 1600
-          const MAX_HEIGHT = 1600
+          const MAX_WIDTH = 2400
+          const MAX_HEIGHT = 2400
           let width = img.width
           let height = img.height
 
@@ -83,8 +85,8 @@ export default function LabResults() {
           const ctx = canvas.getContext('2d')
           ctx?.drawImage(img, 0, 0, width, height)
           
-          // Compress quality to 0.7 to significantly reduce payload size
-          const dataUrl = canvas.toDataURL('image/jpeg', 0.7)
+          // High quality (0.9) to maintain medical accuracy
+          const dataUrl = canvas.toDataURL('image/jpeg', 0.9)
           resolve(dataUrl)
         }
         img.onerror = reject
@@ -108,8 +110,14 @@ export default function LabResults() {
       
       if (result.parsedData) {
         setOcrText(JSON.stringify(result.parsedData, null, 2))
+        if (result.parsedData.reportDate && /^\d{4}-\d{2}-\d{2}$/.test(result.parsedData.reportDate)) {
+          setManualDate(result.parsedData.reportDate)
+        } else {
+          setManualDate(new Date().toISOString().split('T')[0])
+        }
       } else {
         setOcrText(result.rawText)
+        setManualDate(new Date().toISOString().split('T')[0])
       }
     } catch (err: any) {
       console.error('OCR failed', err)
@@ -137,9 +145,10 @@ export default function LabResults() {
     }
 
     try {
-      await api.saveLabResult(profile.loved_one_id, reportDate, ocrText, parsedContent)
+      await api.saveLabResult(profile.loved_one_id, manualDate || reportDate, ocrText, parsedContent)
       setIsUploadOpen(false)
       setOcrText('')
+      setManualDate('')
       loadLabs()
     } catch (e: any) {
       console.error(e)
@@ -157,6 +166,15 @@ export default function LabResults() {
     }
   }
 
+  const toggleExpand = (id: string) => {
+    setExpandedLabs(prev => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
+
   const handleAskAI = async () => {
     if (!chatInput.trim() || !chatLab) return
     const userMsg = chatInput
@@ -167,14 +185,18 @@ export default function LabResults() {
     setIsChatting(true)
     
     try {
-      const reply = await api.askAI(userMsg, chatLab.parsedData || chatLab.content, chatHistory)
+      const reply = await api.askAI(userMsg, chatLab.parsedData || chatLab.content, newHistoryUser)
       const finalHistory = [...newHistoryUser, { role: 'ai', text: reply }] as any
       setChatHistory(finalHistory)
       
-      // Save to database
-      await api.updateLabResultChat(chatLab.id, finalHistory)
+      // Update local state FIRST so history persists even if DB save fails
       setLabs(prev => prev.map(l => l.id === chatLab.id ? { ...l, chat_history: finalHistory } : l))
       setChatLab((prev: any) => ({ ...prev, chat_history: finalHistory }))
+      
+      // Save to database in the background (don't block UX)
+      api.updateLabResultChat(chatLab.id, finalHistory).catch(err => {
+        console.error('Failed to save chat history to DB:', err)
+      })
     } catch (e) {
       console.error(e)
       setChatHistory(prev => [...prev, { role: 'ai', text: '오류가 발생했습니다. 다시 시도해주세요.' }])
@@ -189,26 +211,38 @@ export default function LabResults() {
   const normalizeMetrics = (metricsRaw: any): Record<string, string> | null => {
     if (!metricsRaw) return null
     if (typeof metricsRaw === 'string') return { 'Result': metricsRaw }
-    if (Array.isArray(metricsRaw)) {
-      return metricsRaw.reduce((acc: any, curr: any) => {
-        if (typeof curr === 'object' && curr !== null) {
-          if (curr.metricName && curr.value !== undefined) acc[curr.metricName] = String(curr.value)
-          else if (curr.name && curr.value !== undefined) acc[curr.name] = String(curr.value)
-          else {
-            Object.entries(curr).forEach(([k, v]) => acc[k] = String(v))
-          }
+    
+    const res: Record<string, string> = {}
+    
+    const processItem = (key: string, val: any) => {
+      if (val === null || val === undefined) return
+      if (typeof val === 'object' && !Array.isArray(val)) {
+        // Flatten nested objects or use a key if it's a specific metric
+        if (val.value !== undefined) {
+          res[key] = String(val.value) + (val.unit ? ` ${val.unit}` : '')
+        } else {
+          Object.entries(val).forEach(([k, v]) => processItem(k, v))
         }
-        return acc
-      }, {})
+      } else if (Array.isArray(val)) {
+        val.forEach((item, idx) => {
+          if (typeof item === 'object') {
+            const name = item.metricName || item.name || `${key}_${idx}`
+            const value = item.value !== undefined ? String(item.value) : JSON.stringify(item)
+            res[name] = value
+          } else {
+            res[`${key}_${idx}`] = String(item)
+          }
+        })
+      } else {
+        res[key] = String(val)
+      }
     }
+
     if (typeof metricsRaw === 'object') {
-      const res: Record<string, string> = {}
-      Object.entries(metricsRaw).forEach(([k, v]) => {
-        res[k] = typeof v === 'object' ? JSON.stringify(v) : String(v)
-      })
-      return Object.keys(res).length > 0 ? res : null
+      Object.entries(metricsRaw).forEach(([k, v]) => processItem(k, v))
     }
-    return null
+    
+    return Object.keys(res).length > 0 ? res : null
   }
 
   if (ocrText && !ocrLoading) {
@@ -282,6 +316,16 @@ export default function LabResults() {
 
               {ocrText && !ocrLoading && (
                 <div className="space-y-4 flex-1">
+                  <div className="space-y-1">
+                    <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">검사일자</label>
+                    <input 
+                      type="date" 
+                      value={manualDate} 
+                      onChange={e => setManualDate(e.target.value)}
+                      className="w-full h-12 px-4 rounded-xl border bg-background text-base focus:ring-2 focus:ring-primary/20 outline-none transition-all"
+                    />
+                  </div>
+
                   <p className="text-sm font-medium">{t('labs.review_desc')}</p>
                   
                   {normalizedPreviewMetrics ? (
@@ -336,12 +380,12 @@ export default function LabResults() {
         ) : (
           labs.map(lab => (
             <Card key={lab.id} className="rounded-2xl shadow-sm border-0 bg-background overflow-hidden relative">
-              <CardHeader className="pb-3 bg-secondary/20 flex flex-row justify-between items-center pr-2">
+              <CardHeader className="pb-3 bg-secondary/20 flex flex-row justify-between items-center pr-2 cursor-pointer" onClick={() => toggleExpand(lab.id)}>
                 <CardTitle className="text-lg flex items-center gap-2">
-                  <FileText className="w-5 h-5 text-primary" />
+                  {expandedLabs.has(lab.id) ? <ChevronUp className="w-5 h-5 text-primary" /> : <ChevronDown className="w-5 h-5 text-primary" />}
                   {lab.date}
                 </CardTitle>
-                <div className="flex items-center">
+                <div className="flex items-center" onClick={e => e.stopPropagation()}>
                   <Button variant="ghost" size="icon" className="h-10 w-10 text-primary/80" onClick={() => {
                     setChatLab(lab)
                     setChatHistory(lab.chat_history || [{ role: 'ai', text: '무엇이든 물어보세요! 이 검사 결과에 대해 설명해드릴 수 있습니다.' }])
@@ -369,9 +413,9 @@ export default function LabResults() {
                     }
                   }
                   
-                  if (normMetrics) {
+                  if (normMetrics && expandedLabs.has(lab.id)) {
                     return (
-                      <div className="flex flex-col divide-y divide-border/50">
+                      <div className="flex flex-col divide-y divide-border/50 animate-in fade-in slide-in-from-top-1 duration-200">
                         <div className="flex justify-between px-4 py-2 bg-secondary/5">
                           <span className="text-xs text-muted-foreground font-medium">검사명</span>
                           <span className="text-xs text-muted-foreground font-medium">수치</span>
@@ -388,6 +432,22 @@ export default function LabResults() {
                             </div>
                           )
                         })}
+                      </div>
+                    )
+                  } else if (normMetrics && !expandedLabs.has(lab.id)) {
+                    return (
+                      <div className="px-4 py-3 text-sm text-muted-foreground bg-secondary/5 flex items-center justify-between group cursor-pointer" onClick={() => toggleExpand(lab.id)}>
+                        <div className="flex flex-wrap gap-2">
+                          {Object.keys(normMetrics).slice(0, 3).map(k => (
+                            <span key={k} className="bg-background px-2 py-0.5 rounded border text-[11px] font-medium">
+                              {k}
+                            </span>
+                          ))}
+                          {Object.keys(normMetrics).length > 3 && (
+                            <span className="text-[11px] opacity-60">외 {Object.keys(normMetrics).length - 3}건...</span>
+                          )}
+                        </div>
+                        <span className="text-primary text-xs font-semibold group-hover:underline">상세보기</span>
                       </div>
                     )
                   } else {

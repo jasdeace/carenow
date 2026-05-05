@@ -9,7 +9,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
 import { Badge } from '@/components/ui/badge'
-import { Pill, Plus, Camera, Loader2, Check, Trash2 } from 'lucide-react'
+import { Pill, Plus, Camera, Loader2, Check, Trash2, Search, Info } from 'lucide-react'
 
 export default function Medications() {
   const { t } = useTranslation()
@@ -24,6 +24,16 @@ export default function Medications() {
   const [dosageAmt, setDosageAmt] = useState('')
   const [dosageUnit, setDosageUnit] = useState('mg')
   const [ocrLoading, setOcrLoading] = useState(false)
+  
+  // Drug API search state
+  const [drugResults, setDrugResults] = useState<any[]>([])
+  const [drugSearching, setDrugSearching] = useState(false)
+  const [showDrugResults, setShowDrugResults] = useState(false)
+  const searchTimeoutRef = useRef<any>(null)
+  
+  // Drug detail dialog
+  const [drugDetail, setDrugDetail] = useState<any>(null)
+  const [drugDetailLoading, setDrugDetailLoading] = useState(false)
   
   const fileInputRef = useRef<HTMLInputElement>(null)
 
@@ -129,6 +139,56 @@ export default function Medications() {
     }
   }
 
+  const handleMedNameChange = (value: string) => {
+    setMedName(value)
+    setShowDrugResults(true)
+    
+    if (searchTimeoutRef.current) clearTimeout(searchTimeoutRef.current)
+    
+    if (value.trim().length < 2) {
+      setDrugResults([])
+      return
+    }
+    
+    searchTimeoutRef.current = setTimeout(async () => {
+      setDrugSearching(true)
+      try {
+        const result = await api.searchDrugInfo(value.trim())
+        setDrugResults(result.drugs || [])
+      } catch (err) {
+        console.error('Drug search failed:', err)
+        setDrugResults([])
+      } finally {
+        setDrugSearching(false)
+      }
+    }, 400)
+  }
+
+  const selectDrug = (drug: any) => {
+    setMedName(drug.itemName)
+    setShowDrugResults(false)
+    setDrugResults([])
+  }
+
+  const lookupDrugDetail = async (medNameKo: string) => {
+    if (!medNameKo) return
+    setDrugDetailLoading(true)
+    setDrugDetail(null)
+    try {
+      const result = await api.searchDrugInfo(medNameKo)
+      if (result.drugs && result.drugs.length > 0) {
+        setDrugDetail(result.drugs[0])
+      } else {
+        setDrugDetail({ itemName: medNameKo, notFound: true })
+      }
+    } catch (err) {
+      console.error('Drug detail lookup failed:', err)
+      setDrugDetail({ itemName: medNameKo, notFound: true })
+    } finally {
+      setDrugDetailLoading(false)
+    }
+  }
+
   return (
     <div className="flex flex-col min-h-screen bg-secondary/20 px-4 pt-8 space-y-6 max-w-md mx-auto">
       <div className="flex justify-between items-center">
@@ -179,16 +239,39 @@ export default function Medications() {
 
               {/* Manual Form */}
               <form onSubmit={handleManualAdd} className="space-y-4">
-                <div className="space-y-2">
+                <div className="space-y-2 relative">
                   <Label htmlFor="medName">{t('meds.med_name')}</Label>
-                  <Input 
-                    id="medName"
-                    name="medName"
-                    required 
-                    value={medName} 
-                    onChange={e => setMedName(e.target.value)} 
-                    className="h-14 text-lg" 
-                  />
+                  <div className="relative">
+                    <Input 
+                      id="medName"
+                      name="medName"
+                      required 
+                      value={medName} 
+                      onChange={e => handleMedNameChange(e.target.value)}
+                      onFocus={() => medName.trim().length >= 2 && setShowDrugResults(true)}
+                      onBlur={() => setTimeout(() => setShowDrugResults(false), 200)}
+                      className="h-14 text-lg pr-10" 
+                      placeholder="약 이름을 입력하세요"
+                      autoComplete="off"
+                    />
+                    {drugSearching && <Loader2 className="w-5 h-5 animate-spin absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground" />}
+                    {!drugSearching && medName.trim().length >= 2 && <Search className="w-5 h-5 absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground/50" />}
+                  </div>
+                  {showDrugResults && drugResults.length > 0 && (
+                    <div className="absolute z-50 w-full bg-background border rounded-xl shadow-lg max-h-48 overflow-y-auto mt-1">
+                      {drugResults.map((drug, idx) => (
+                        <button
+                          key={idx}
+                          type="button"
+                          className="w-full text-left px-4 py-3 hover:bg-secondary/50 transition-colors border-b last:border-b-0 flex flex-col"
+                          onMouseDown={() => selectDrug(drug)}
+                        >
+                          <span className="font-medium text-sm">{drug.itemName}</span>
+                          <span className="text-xs text-muted-foreground truncate">{drug.entpName}</span>
+                        </button>
+                      ))}
+                    </div>
+                  )}
                 </div>
                 <div className="flex gap-4">
                   <div className="space-y-2 flex-1">
@@ -268,7 +351,7 @@ export default function Medications() {
           meds.map(med => (
             <Card key={med.id} className="rounded-2xl shadow-sm border-0 bg-background">
               <CardContent className="p-4 flex items-center justify-between">
-                <div className="flex items-center gap-4">
+                <div className="flex items-center gap-4 flex-1 cursor-pointer" onClick={() => lookupDrugDetail(med.name_ko || med.name_en)}>
                   <div className="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center text-primary">
                     <Pill className="w-6 h-6" />
                   </div>
@@ -277,14 +360,89 @@ export default function Medications() {
                     <p className="text-muted-foreground">{med.dosage_amount}{med.dosage_unit}</p>
                   </div>
                 </div>
-                <Button variant="ghost" size="icon" onClick={() => handleDeleteMed(med.id)} className="text-destructive hover:text-destructive hover:bg-destructive/10">
-                  <Trash2 className="w-5 h-5" />
-                </Button>
+                <div className="flex items-center gap-1">
+                  <Button variant="ghost" size="icon" onClick={() => lookupDrugDetail(med.name_ko || med.name_en)} className="text-primary/60 hover:text-primary">
+                    <Info className="w-5 h-5" />
+                  </Button>
+                  <Button variant="ghost" size="icon" onClick={() => handleDeleteMed(med.id)} className="text-destructive hover:text-destructive hover:bg-destructive/10">
+                    <Trash2 className="w-5 h-5" />
+                  </Button>
+                </div>
               </CardContent>
             </Card>
           ))
         )}
       </div>
+
+      {/* Drug Detail Dialog */}
+      <Dialog open={!!drugDetail || drugDetailLoading} onOpenChange={(open) => !open && setDrugDetail(null)}>
+        <DialogContent className="w-11/12 rounded-2xl max-h-[85vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="text-xl flex items-center gap-2">
+              <Pill className="w-5 h-5 text-primary" />
+              {drugDetail?.itemName || '약 정보 조회중...'}
+            </DialogTitle>
+          </DialogHeader>
+          {drugDetailLoading ? (
+            <div className="flex items-center justify-center py-12">
+              <Loader2 className="w-8 h-8 animate-spin text-primary" />
+            </div>
+          ) : drugDetail?.notFound ? (
+            <div className="text-center py-8 text-muted-foreground">
+              <p>'{drugDetail.itemName}'에 대한 정보를 찾을 수 없습니다.</p>
+              <p className="text-xs mt-2">정확한 약품명으로 다시 검색해보세요.</p>
+            </div>
+          ) : drugDetail ? (
+            <div className="space-y-4">
+              {drugDetail.itemImage && (
+                <img src={drugDetail.itemImage} alt={drugDetail.itemName} className="w-full rounded-xl border" />
+              )}
+              {drugDetail.entpName && (
+                <div>
+                  <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">제조사</h4>
+                  <p className="text-sm mt-1">{drugDetail.entpName}</p>
+                </div>
+              )}
+              {drugDetail.efcyQesitm && (
+                <div>
+                  <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">효능</h4>
+                  <p className="text-sm mt-1" dangerouslySetInnerHTML={{ __html: drugDetail.efcyQesitm }} />
+                </div>
+              )}
+              {drugDetail.useMethodQesitm && (
+                <div>
+                  <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">용법·용량</h4>
+                  <p className="text-sm mt-1" dangerouslySetInnerHTML={{ __html: drugDetail.useMethodQesitm }} />
+                </div>
+              )}
+              {drugDetail.atpnQesitm && (
+                <div>
+                  <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">⚠️ 주의사항</h4>
+                  <p className="text-sm mt-1 text-yellow-700 dark:text-yellow-400" dangerouslySetInnerHTML={{ __html: drugDetail.atpnQesitm }} />
+                </div>
+              )}
+              {drugDetail.intrcQesitm && (
+                <div>
+                  <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">상호작용</h4>
+                  <p className="text-sm mt-1" dangerouslySetInnerHTML={{ __html: drugDetail.intrcQesitm }} />
+                </div>
+              )}
+              {drugDetail.seQesitm && (
+                <div>
+                  <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">부작용</h4>
+                  <p className="text-sm mt-1 text-destructive/80" dangerouslySetInnerHTML={{ __html: drugDetail.seQesitm }} />
+                </div>
+              )}
+              {drugDetail.depositMethodQesitm && (
+                <div>
+                  <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">보관법</h4>
+                  <p className="text-sm mt-1" dangerouslySetInnerHTML={{ __html: drugDetail.depositMethodQesitm }} />
+                </div>
+              )}
+            </div>
+          ) : null}
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

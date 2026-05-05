@@ -1,4 +1,5 @@
 import { supabase } from './supabase'
+import { format } from 'date-fns'
 
 export const api = {
   // Medications
@@ -173,7 +174,7 @@ export const api = {
       .from('daily_checkins')
       .insert({
         loved_one_id: lovedOneId,
-        checkin_date: new Date().toISOString().split('T')[0],
+        checkin_date: format(new Date(), 'yyyy-MM-dd'),
         checked_in_at: new Date().toISOString(),
         mood_score: moodScore
       })
@@ -181,7 +182,7 @@ export const api = {
   },
 
   getTodayCheckin: async (lovedOneId: string) => {
-    const today = new Date().toISOString().split('T')[0]
+    const today = format(new Date(), 'yyyy-MM-dd')
     const { data, error } = await supabase
       .from('daily_checkins')
       .select('*')
@@ -383,16 +384,19 @@ export const api = {
 
   joinCareCircleByPhone: async (caregiverUserId: string, phone: string) => {
     // 1. Find user by phone
-    const { data: userData, error: userError } = await supabase
+    const { data: users, error: userError } = await supabase
       .from('users')
-      .select('id')
+      .select('id, role')
       .eq('phone_kr', phone)
-      .eq('role', 'loved_one')
-      .limit(1)
-      .maybeSingle()
 
     if (userError) throw userError
-    if (!userData) throw new Error('No loved one found with that phone number.')
+    if (!users || users.length === 0) throw new Error('가입되지 않은 전화번호입니다.')
+
+    // Pick a user (prioritize loved_one if multiple accounts share the same phone)
+    let userData = users.find(u => u.role === 'loved_one')
+    if (!userData) {
+      userData = users.find(u => u.role === 'caregiver') || users[0]
+    }
 
     // 2. Find circle_id from loved_ones
     const { data: lovedOneData, error: lovedOneError } = await supabase
@@ -483,5 +487,13 @@ export const api = {
       .update({ chat_history: chatHistory })
       .eq('id', id)
     if (error) throw error
+  },
+
+  searchDrugInfo: async (itemName: string) => {
+    const { data, error } = await supabase.functions.invoke('drug-info', {
+      body: { itemName }
+    })
+    if (error) throw error
+    return data
   },
 }

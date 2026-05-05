@@ -35,14 +35,37 @@ serve(async (req: Request) => {
       throw new Error("GEMINI_API_KEY is not set in Edge Function secrets")
     }
 
-    const geminiEndpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite-preview:generateContent?key=${GEMINI_API_KEY}`
+    // Proactively find the best model if 3.1-flash-lite-preview isn't accepted
+    let modelId = "gemini-1.5-flash"
+    try {
+      const modelsResp = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${GEMINI_API_KEY}`)
+      const modelsData = await modelsResp.json()
+      if (modelsData.models) {
+        const bestModel = modelsData.models.find((m: any) => m.name.includes("3.1") && m.name.includes("flash") && m.name.includes("lite"))
+                       || modelsData.models.find((m: any) => m.name.includes("3.1") && m.name.includes("flash"))
+                       || modelsData.models.find((m: any) => m.name.includes("2.0") && m.name.includes("flash"))
+        if (bestModel) {
+          modelId = bestModel.name.split('/').pop()
+          console.log("Auto-discovered best model:", modelId)
+        }
+      }
+    } catch (e) {
+      console.warn("Model discovery failed, falling back to 1.5-flash", e)
+    }
+
+    const geminiEndpoint = `https://generativelanguage.googleapis.com/v1beta/models/${modelId}:generateContent?key=${GEMINI_API_KEY}`
 
     const prompt = `
-      You are a highly accurate medical OCR assistant. Your job is to extract text from the provided image(s) of a lab result or medication prescription. 
-      The text might be in English or Korean. Ensure you accurately extract both languages.
+      You are a professional medical data extraction assistant. 
+      Your goal is to extract structured data from medical documents (lab results or prescriptions) with 100% accuracy.
       
-      If it looks like a Medication Prescription/Label, extract the medication name and dosage amount.
-      If it looks like a Lab Result, extract all key metrics (e.g., Blood pressure, Glucose, Cholesterol, White blood cell count) into key-value pairs.
+      CRITICAL INSTRUCTIONS:
+      1. Extract all metric names EXACTLY as they appear (e.g., "HbA1c", "AST/ALT").
+      2. Keep units (e.g., mg/dL, %) together with the value if possible, or in a clear format.
+      3. For lab results, the 'metrics' object should contain every single test item found.
+      4. If you see 'H' (High) or 'L' (Low) markers next to values, include them (e.g. "140 H").
+      5. The text is in Korean and English. Do not translate metric names; extract them as written.
+      6. FIND THE REPORT DATE: Look for "Date of report", "검사일", "수령일", or any date on the document. This is critical.
       
       Respond ONLY with a valid JSON object matching this structure:
       {
@@ -80,7 +103,13 @@ serve(async (req: Request) => {
 
     if (!response.ok) {
       console.error("Gemini Error:", geminiData)
-      throw new Error(geminiData.error?.message || "Failed to contact Gemini API")
+      return new Response(JSON.stringify({ 
+        error: geminiData.error?.message || "Failed to contact Gemini API",
+        debug: { modelUsed: modelId, status: response.status }
+      }), { 
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }, 
+        status: 400 
+      })
     }
 
     // Extract the JSON string from Gemini's response
@@ -97,7 +126,8 @@ serve(async (req: Request) => {
 
     return new Response(JSON.stringify({
       rawText: jsonString,
-      structuredJson: structuredJson
+      structuredJson: structuredJson,
+      modelUsed: modelId
     }), { 
       headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
     })
