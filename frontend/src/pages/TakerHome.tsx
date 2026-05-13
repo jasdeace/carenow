@@ -18,11 +18,11 @@ import {
   DialogTitle,
   DialogTrigger,
 } from '@/components/ui/dialog'
-import { AlertCircle, HeartPulse, Check } from 'lucide-react'
+import { AlertCircle, HeartPulse, Check, Eye, Trash2, User, Loader2 } from 'lucide-react'
 
 export default function TakerHome() {
   const { t, i18n } = useTranslation()
-  const { profile } = useAuthStore()
+  const { user, profile } = useAuthStore()
   const navigate = useNavigate()
   
   const [meds, setMeds] = useState<any[]>([])
@@ -30,6 +30,10 @@ export default function TakerHome() {
   const [weeklyProgress, setWeeklyProgress] = useState<any[]>([])
   const [latestBP, setLatestBP] = useState<any>(null)
   const [currentTime, setCurrentTime] = useState(new Date())
+
+  // Viewers state
+  const [viewers, setViewers] = useState<any[]>([])
+  const [removingId, setRemovingId] = useState<string | null>(null)
 
   const [sys, setSys] = useState('')
   const [dia, setDia] = useState('')
@@ -49,7 +53,23 @@ export default function TakerHome() {
     if (profile?.loved_one_id) {
       loadDashboardData()
     }
-  }, [profile?.loved_one_id])
+    if (profile?.id) {
+      loadViewers()
+    }
+  }, [profile?.loved_one_id, profile?.id])
+
+  const loadViewers = async () => {
+    if (!profile?.id) return
+    try {
+      const circleId = await api.getLovedOneCircleId(profile.id)
+      if (circleId) {
+        const allMembers = await api.getCareCircleViewers(circleId)
+        setViewers(allMembers.filter((m: any) => m.user_id !== user?.id))
+      }
+    } catch (e) {
+      console.error('Failed to load viewers:', e)
+    }
+  }
 
   const loadDashboardData = async () => {
     if (!profile?.loved_one_id) return
@@ -69,46 +89,89 @@ export default function TakerHome() {
     }
   }
 
-  // Helper: check if a medication was taken today based on its logs
-  const isTakenToday = (med: any) => {
+  // Helper: check if a specific dose (medication + time) was taken today
+  const isDoseTakenToday = (med: any, timeStr: string) => {
     const today = new Date().toDateString()
-    return med.medication_logs?.some((l: any) => l.status === 'taken' && new Date(l.taken_at).toDateString() === today) || false
+    // Find logs for this med today that roughly match the scheduled time (within the same day)
+    // For MVP, we just check if there's a log with a scheduled_at matching this time today
+    return med.medication_logs?.some((l: any) => {
+      if (l.status !== 'taken') return false
+      const logDate = new Date(l.taken_at).toDateString()
+      if (logDate !== today) return false
+      
+      // If the log has a scheduled_at, check if the hour matches
+      if (l.scheduled_at) {
+        const schedTime = new Date(l.scheduled_at).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })
+        return schedTime === timeStr.substring(0, 5)
+      }
+      return true // Fallback
+    }) || false
   }
 
-  const handleTakeMed = async (id: string) => {
-    // Optimistic: append a fake log so UI updates instantly
-    setMeds(meds.map(m => m.id === id ? {
-      ...m,
-      medication_logs: [...(m.medication_logs || []), { id: 'opt', status: 'taken', taken_at: new Date().toISOString() }]
-    } : m))
-    if (profile?.id) {
-      try {
-        await api.logMedicationDose(id, profile.id, 'taken')
-        if (profile.loved_one_id) {
-          const progress = await api.getWeeklyAdherence(profile.loved_one_id)
-          setWeeklyProgress(progress || [])
+  // Flatten meds into individual dose items for the UI
+  const doseItems = meds.flatMap(med => {
+    const schedules = med.medication_schedules || [{ time_of_day: '09:00:00' }]
+    return schedules.map((s: any) => ({
+      ...med,
+      schedule_id: s.id,
+      display_time: s.time_of_day?.substring(0, 5) || '09:00',
+      is_taken: isDoseTakenToday(med, s.time_of_day || '09:00')
+    }))
+  }).sort((a, b) => a.display_time.localeCompare(b.display_time))
+
+  const handleTakeMed = async (med: any) => {
+    // Optimistic UI update
+    setMeds(prevMeds => prevMeds.map(m => {
+      if (m.id === med.id) {
+        const newLog = { 
+          id: Math.random().toString(), 
+          status: 'taken', 
+          taken_at: new Date().toISOString(),
+          scheduled_at: new Date(new Date().setHours(parseInt(med.display_time.split(':')[0]), parseInt(med.display_time.split(':')[1]), 0, 0)).toISOString()
         }
-      } catch (e) {
-        console.error(e)
+        return { ...m, medication_logs: [...(m.medication_logs || []), newLog] }
       }
+      return m
+    }))
+
+    try {
+      // For MVP, scheduledAt is just today at the display_time
+      const [hours, minutes] = med.display_time.split(':')
+      const scheduledAt = new Date()
+      scheduledAt.setHours(parseInt(hours), parseInt(minutes), 0, 0)
+      
+      await api.takeMedication(med.id, scheduledAt.toISOString())
+      loadDashboardData()
+    } catch (error) {
+      console.error(error)
+      loadDashboardData() // Rollback
     }
   }
 
-  const handleUndoMed = async (id: string) => {
-    // Optimistic: remove today's logs
+  const handleUndoMed = async (med: any) => {
     const today = new Date().toDateString()
-    setMeds(meds.map(m => m.id === id ? {
-      ...m,
-      medication_logs: (m.medication_logs || []).filter((l: any) => !(l.status === 'taken' && new Date(l.taken_at).toDateString() === today))
-    } : m))
-    try {
-      await api.undoMedicationDose(id)
-      if (profile?.loved_one_id) {
-        const progress = await api.getWeeklyAdherence(profile.loved_one_id)
-        setWeeklyProgress(progress || [])
+    const log = med.medication_logs?.find((l: any) => {
+      const logDate = new Date(l.taken_at).toDateString()
+      const schedTime = l.scheduled_at ? new Date(l.scheduled_at).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }) : null
+      return logDate === today && (schedTime === med.display_time || !schedTime)
+    })
+
+    if (!log) return
+
+    // Optimistic UI
+    setMeds(prevMeds => prevMeds.map(m => {
+      if (m.id === med.id) {
+        return { ...m, medication_logs: m.medication_logs.filter((l: any) => l.id !== log.id) }
       }
-    } catch (e) {
-      console.error(e)
+      return m
+    }))
+
+    try {
+      await api.undoMedication(log.id)
+      loadDashboardData()
+    } catch (error) {
+      console.error(error)
+      loadDashboardData()
     }
   }
 
@@ -144,6 +207,37 @@ export default function TakerHome() {
   const handleSOS = () => {
     // Open native phone dialer for emergency
     window.location.href = 'tel:119'
+  }
+
+  const handleRemoveViewer = async (v: any) => {
+    setRemovingId(v.id)
+    try {
+      await api.removeCareCircleMember(v.id)
+      setViewers(prev => prev.filter(item => item.id !== v.id))
+    } catch (e) {
+      console.error(e)
+      alert(t('caregiver.disconnect_error'))
+    } finally {
+      setRemovingId(null)
+    }
+  }
+
+  const handleAcceptViewer = async (v: any) => {
+    setRemovingId(v.id)
+    try {
+      await api.acceptCareCircleMember(v.id)
+      setViewers(prev => prev.map(item => item.id === v.id ? { ...item, accepted_at: new Date().toISOString() } : item))
+    } catch (e) {
+      console.error(e)
+      alert(t('meds.accept_failed'))
+    } finally {
+      setRemovingId(null)
+    }
+  }
+
+  const getUserInfo = (v: any) => {
+    const raw = v.users
+    return Array.isArray(raw) ? raw[0] : raw
   }
 
   const getGreeting = () => {
@@ -182,33 +276,38 @@ export default function TakerHome() {
           <CardTitle className="text-2xl flex items-center justify-between">
             {t('home.meds_title')}
             <Badge variant="secondary" className="text-lg px-3 py-1">
-              {meds.filter(m => isTakenToday(m)).length} / {meds.length}
+              {doseItems.filter(d => d.is_taken).length} / {doseItems.length}
             </Badge>
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
-          {meds.length === 0 ? (
+          {doseItems.length === 0 ? (
             <p className="text-lg text-muted-foreground">{t('home.meds_empty')}</p>
           ) : (
-            meds.map((med) => (
-              <div key={med.id} className="flex flex-col p-4 bg-secondary/40 rounded-xl space-y-3">
+            doseItems.map((dose, idx) => (
+              <div key={`${dose.id}-${idx}`} className={`flex flex-col p-4 rounded-xl space-y-3 border transition-all ${dose.is_taken ? 'bg-secondary/20 border-transparent opacity-80' : 'bg-primary/5 border-primary/10'}`}>
                 <div className="flex justify-between items-center">
-                  <span className="text-xl font-medium">{med.name_ko}</span>
-                  <span className="text-lg text-muted-foreground">{med.dosage_amount}{med.dosage_unit}</span>
+                  <div className="flex items-center gap-3">
+                    <Badge variant="outline" className={`text-lg font-bold ${dose.is_taken ? 'bg-muted text-muted-foreground' : 'bg-primary/10 text-primary border-primary/20'}`}>
+                      {dose.display_time}
+                    </Badge>
+                    <span className="text-xl font-medium">{dose.name_ko}</span>
+                  </div>
+                  <span className="text-lg text-muted-foreground">{dose.dosage_amount}{dose.dosage_unit}</span>
                 </div>
-                {isTakenToday(med) ? (
+                {dose.is_taken ? (
                   <Button 
                     variant="outline"
-                    className="w-full h-16 text-xl rounded-xl border-yellow-500/50 text-yellow-600"
-                    onClick={() => handleUndoMed(med.id)}
+                    className="w-full h-16 text-xl rounded-xl border-yellow-500/50 text-yellow-600 bg-yellow-50/30"
+                    onClick={() => handleUndoMed(dose)}
                   >
                     {t('common.undo')}
                   </Button>
                 ) : (
                   <Button 
                     variant="default"
-                    className="w-full h-16 text-xl rounded-xl"
-                    onClick={() => handleTakeMed(med.id)}
+                    className="w-full h-16 text-xl rounded-xl shadow-md"
+                    onClick={() => handleTakeMed(dose)}
                   >
                     {t('home.took_it')}
                   </Button>
@@ -297,6 +396,78 @@ export default function TakerHome() {
           </CardContent>
         </Card>
       )}
+
+      {/* Connection Management (Who sees my data) */}
+      <Card className="rounded-2xl shadow-md border-0 bg-background">
+        <CardHeader className="pb-3">
+          <CardTitle className="text-xl flex items-center gap-2">
+            <Eye className="text-primary w-6 h-6" />
+            {t('profile.who_sees')}
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          {viewers.length === 0 ? (
+            <p className="text-sm text-muted-foreground text-center py-4">{t('profile.no_viewers')}</p>
+          ) : (
+            viewers.map((v) => {
+              const info = getUserInfo(v)
+              const isPending = !v.accepted_at
+              return (
+                <div key={v.id} className={`flex flex-col p-3 rounded-xl border ${isPending ? 'bg-amber-50/50 border-amber-200' : 'bg-secondary/20 border-transparent'}`}>
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <div className={`w-10 h-10 rounded-full flex items-center justify-center ${isPending ? 'bg-amber-100' : 'bg-primary/10'}`}>
+                        <User className={`w-5 h-5 ${isPending ? 'text-amber-600' : 'text-primary'}`} />
+                      </div>
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <p className="font-semibold text-sm">{info?.name_ko || info?.email || 'Caregiver'}</p>
+                          {isPending && <Badge variant="outline" className="text-[10px] h-4 px-1.5 border-amber-300 text-amber-700 bg-amber-50">{t('common.pending')}</Badge>}
+                        </div>
+                        {info?.phone_kr && <p className="text-[10px] text-muted-foreground">{info.phone_kr}</p>}
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-1">
+                      {isPending ? (
+                        <>
+                          <Button 
+                            variant="ghost" 
+                            size="sm" 
+                            className="text-amber-600 hover:bg-amber-100 h-8 px-3 rounded-full text-xs font-bold" 
+                            onClick={() => handleAcceptViewer(v)}
+                            disabled={removingId === v.id}
+                          >
+                            {removingId === v.id ? <Loader2 className="w-3 h-3 animate-spin" /> : t('common.accept')}
+                          </Button>
+                          <Button 
+                            variant="ghost" 
+                            size="sm" 
+                            className="text-destructive hover:bg-destructive/10 h-8 px-2 rounded-full" 
+                            onClick={() => handleRemoveViewer(v)}
+                            disabled={removingId === v.id}
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </Button>
+                        </>
+                      ) : (
+                        <Button 
+                          variant="ghost" 
+                          size="sm" 
+                          className="text-destructive hover:bg-destructive/10 h-8 px-2 rounded-full" 
+                          onClick={() => handleRemoveViewer(v)}
+                          disabled={removingId === v.id}
+                        >
+                          {removingId === v.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
+                        </Button>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )
+            })
+          )}
+        </CardContent>
+      </Card>
 
       {/* SOS Button */}
       <Dialog>

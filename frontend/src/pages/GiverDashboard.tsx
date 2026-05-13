@@ -13,7 +13,7 @@ import { Badge } from '@/components/ui/badge'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Separator } from '@/components/ui/separator'
 import { Button } from '@/components/ui/button'
-import { Activity, Pill, HeartPulse, CheckCircle2, Loader2, AlertCircle, ArrowLeft, Trash2, Check } from 'lucide-react'
+import { Activity, Pill, HeartPulse, CheckCircle2, Loader2, AlertCircle, ArrowLeft, Trash2, Check, UserMinus } from 'lucide-react'
 
 export default function GiverDashboard() {
   const { t, i18n } = useTranslation()
@@ -24,6 +24,7 @@ export default function GiverDashboard() {
   
   const [loading, setLoading] = useState(true)
   const [dashboardData, setDashboardData] = useState<any>(null)
+  const [isAccepted, setIsAccepted] = useState(false)
 
   const dateLocale = i18n.language === 'ko' ? ko : enUS
 
@@ -35,6 +36,19 @@ export default function GiverDashboard() {
     if (!takerId) return
     try {
       setLoading(true)
+      
+      // Verify acceptance first
+      const takerList = await api.getGiverTakersList(user!.id)
+      const currentTaker = takerList.find(t => t.id === takerId)
+      
+      if (!currentTaker?.accepted_at) {
+        setIsAccepted(false)
+        setLoading(false)
+        return
+      }
+      
+      setIsAccepted(true)
+
       const [checkin, bpData, meds, adherence, pendingMeds] = await Promise.all([
         api.getTodayCheckin(takerId),
         api.getVitalsBP(takerId),
@@ -101,7 +115,7 @@ export default function GiverDashboard() {
     const unit = (form.elements.namedItem('dosageUnit') as HTMLInputElement).value
     
     try {
-      await api.addMedication(takerId!, name, String(dosage), unit, user?.id || '', false) // false = pending, taker must accept
+      await api.addMedication(takerId!, name, String(dosage), unit, user?.id || '', ['09:00'], false) // false = pending, taker must accept
       form.reset()
       await fetchDashboardData() // Refresh
     } catch (err: any) {
@@ -116,6 +130,24 @@ export default function GiverDashboard() {
 
   if (!takerId) {
     return <div className="flex h-screen items-center justify-center">Taker not found</div>
+  }
+
+  if (!isAccepted) {
+    return (
+      <div className="flex flex-col min-h-screen bg-secondary/10 px-4 pt-12 items-center text-center space-y-6">
+        <div className="w-20 h-20 bg-amber-100 rounded-full flex items-center justify-center">
+          <AlertCircle className="w-10 h-10 text-amber-600" />
+        </div>
+        <div className="space-y-2">
+          <h1 className="text-2xl font-bold">{t('caregiver.awaiting_acceptance')}</h1>
+          <p className="text-muted-foreground text-sm px-8">돌봄 대상자(Taker)가 요청을 수락해야 건강 데이터를 볼 수 있습니다.</p>
+        </div>
+        <Button variant="outline" className="flex items-center gap-2" onClick={() => navigate('/')}>
+          <ArrowLeft className="w-4 h-4" />
+          {t('common.cancel')}
+        </Button>
+      </div>
+    )
   }
 
   return (
@@ -288,21 +320,39 @@ export default function GiverDashboard() {
                   <h3 className="font-semibold text-lg border-b pb-2">{t('caregiver.active_meds')}</h3>
                   {dashboardData?.medications?.length > 0 ? (
                     dashboardData.medications.map((med: any) => (
-                      <div key={med.id} className="p-3 bg-secondary/10 rounded-lg flex items-center justify-between">
-                        <div className="flex items-center gap-3">
-                          <Pill className="w-5 h-5 text-blue-500" />
-                          <div>
-                            <p className="font-medium">{med.name_ko || med.name_en}</p>
-                            <p className="text-sm text-muted-foreground">{med.dosage_amount}{med.dosage_unit}</p>
+                      <div key={med.id} className={`p-3 rounded-lg flex flex-col space-y-2 border ${med.is_active ? 'bg-secondary/10 border-transparent' : 'bg-secondary/5 opacity-60 border-dashed'}`}>
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-3">
+                            <Pill className={`w-5 h-5 ${med.is_active ? 'text-blue-500' : 'text-muted-foreground'}`} />
+                            <div>
+                              <div className="flex items-center gap-2">
+                                <p className="font-medium">{med.name_ko || med.name_en}</p>
+                                {!med.is_active && <Badge variant="secondary" className="text-[10px] h-4">비활성</Badge>}
+                              </div>
+                              <p className="text-sm text-muted-foreground">{med.dosage_amount}{med.dosage_unit}</p>
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <button 
+                              onClick={async () => {
+                                await api.toggleMedicationActive(med.id, !med.is_active)
+                                fetchDashboardData()
+                              }}
+                              className={`w-8 h-5 rounded-full transition-colors relative flex items-center px-0.5 ${med.is_active ? 'bg-primary' : 'bg-muted-foreground/30'}`}
+                            >
+                              <div className={`w-3.5 h-3.5 bg-white rounded-full shadow-sm transition-transform ${med.is_active ? 'translate-x-3.5' : 'translate-x-0'}`} />
+                            </button>
+                            <Button variant="ghost" size="icon" onClick={() => handleDeleteMed(med.id)} className="h-8 w-8 text-destructive hover:bg-destructive/10">
+                              <Trash2 className="w-4 h-4" />
+                            </Button>
                           </div>
                         </div>
-                        <div className="flex items-center gap-2">
-                          <Badge variant={med.medication_logs?.some((l: any) => l.status === 'taken' && new Date(l.taken_at).toDateString() === new Date().toDateString()) ? 'default' : 'secondary'}>
-                            {med.medication_logs?.some((l: any) => l.status === 'taken' && new Date(l.taken_at).toDateString() === new Date().toDateString()) ? t('caregiver.taken') : t('common.pending')}
-                          </Badge>
-                          <Button variant="ghost" size="icon" onClick={() => handleDeleteMed(med.id)} className="h-8 w-8 text-destructive hover:text-destructive hover:bg-destructive/10">
-                            <Trash2 className="w-4 h-4" />
-                          </Button>
+                        <div className="flex flex-wrap gap-1 mt-1">
+                          {med.medication_schedules?.map((s: any, idx: number) => (
+                            <Badge key={idx} variant="outline" className="text-[10px] py-0 h-5 bg-background">
+                              {s.time_of_day?.substring(0, 5)}
+                            </Badge>
+                          ))}
                         </div>
                       </div>
                     ))
@@ -340,12 +390,41 @@ export default function GiverDashboard() {
 
           <TabsContent value="circle">
             <Card>
-              <CardHeader>
-                <CardTitle>{t('caregiver.manage_circle')}</CardTitle>
-                <CardDescription>{t('caregiver.connect_new_desc')}</CardDescription>
+              <CardHeader className="pb-3">
+                <CardTitle className="text-xl flex items-center gap-2">
+                  <UserMinus className="text-destructive w-6 h-6" />
+                  {t('caregiver.manage_circle')}
+                </CardTitle>
+                <CardDescription>{t('caregiver.disconnect_confirm', { name: takerId })}</CardDescription>
               </CardHeader>
-              <CardContent className="h-64 flex items-center justify-center text-muted-foreground">
-                {t('common.pending')}
+              <CardContent className="space-y-4">
+                <div className="p-4 bg-destructive/5 rounded-xl border border-destructive/10">
+                  <h3 className="font-semibold text-destructive mb-1">{t('caregiver.disconnect')}</h3>
+                  <p className="text-sm text-muted-foreground mb-4">
+                    {t('caregiver.disconnect_confirm', { name: '' }).replace('?', '')}
+                  </p>
+                  <Button 
+                    variant="destructive" 
+                    className="w-full"
+                    onClick={async () => {
+                      if (!user?.id || !takerId) return
+                      const confirmed = window.confirm(t('caregiver.disconnect_confirm', { name: '' }))
+                      if (!confirmed) return
+                      try {
+                        const circleId = await api.getTakerCircleId(takerId)
+                        if (circleId) {
+                          await api.leaveCareCircle(user.id, circleId)
+                          navigate('/')
+                        }
+                      } catch (e) {
+                        console.error(e)
+                      }
+                    }}
+                  >
+                    <UserMinus className="w-4 h-4 mr-2" />
+                    {t('caregiver.disconnect')}
+                  </Button>
+                </div>
               </CardContent>
             </Card>
           </TabsContent>

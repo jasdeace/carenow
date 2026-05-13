@@ -1,18 +1,37 @@
 import { supabase } from './supabase'
 import { format } from 'date-fns'
 
+// Helper to strip dosage info (e.g., 500mg, 10정) from drug names for cleaner display
+export const cleanDrugName = (name: string): string => {
+  if (!name) return '';
+  // Remove patterns like 500mg, 10밀리그램, 5정, (500mg), etc.
+  let cleaned = name.replace(/\s*\d+\s*(mg|ml|g|mcg|µg|정|밀리그램|밀리리터|캡슐|IU|단위|cc|v|p|s|kg).*$/i, '');
+  // Remove content in parentheses if it starts with digits
+  cleaned = cleaned.replace(/\(\d+.*?\)/g, '');
+  // Remove any trailing dashes or weird characters left behind
+  cleaned = cleaned.trim().replace(/[-/_]$/, '').trim();
+  return cleaned;
+};
+
 export const api = {
   // Medications
   getMedications: async (lovedOneId: string) => {
     const { data, error } = await supabase
       .from('medications')
-      .select('*')
+      .select('*, medication_schedules(*)')
       .eq('loved_one_id', lovedOneId)
-      .eq('is_active', true)
-      .eq('is_deleted', false)
+      .order('created_at', { ascending: false })
       
     if (error) throw error
     return data
+  },
+
+  toggleMedicationActive: async (medId: string, isActive: boolean) => {
+    const { error } = await supabase
+      .from('medications')
+      .update({ is_active: isActive })
+      .eq('id', medId)
+    if (error) throw error
   },
 
   getTodayMedications: async (lovedOneId: string) => {
@@ -30,22 +49,43 @@ export const api = {
     return data
   },
 
-  addMedication: async (lovedOneId: string, name_ko: string, dosage_amount: string, dosage_unit: string, createdBy: string, isActive: boolean = true) => {
-    console.log('API: addMedication payload:', { lovedOneId, name_ko, dosage_amount, dosage_unit, createdBy, isActive });
-    const { error } = await supabase
+  addMedication: async (lovedOneId: string, name_ko: string, dosage_amount: string, dosage_unit: string, createdBy: string, scheduleTimes: string[] = ['09:00'], isActive: boolean = true) => {
+    console.log('API: addMedication payload:', { lovedOneId, name_ko, dosage_amount, dosage_unit, createdBy, scheduleTimes, isActive });
+    
+    // 1. Insert Medication
+    const { data: medData, error: medError } = await supabase
       .from('medications')
       .insert({
         loved_one_id: lovedOneId,
-        name_ko,
+        name_ko: cleanDrugName(name_ko),
         dosage_amount,
         dosage_unit,
         is_active: isActive,
         created_by: createdBy
       })
-    if (error) {
-      console.error('API: addMedication error:', error);
-      throw error;
+      .select()
+      .single()
+
+    if (medError) {
+      console.error('API: addMedication error:', medError);
+      throw medError;
     }
+
+    // 2. Insert Schedules
+    if (scheduleTimes && scheduleTimes.length > 0) {
+      const scheduleEntries = scheduleTimes.map(time => ({
+        medication_id: medData.id,
+        time_of_day: time,
+        frequency: 'daily'
+      }))
+      
+      const { error: scheduleError } = await supabase
+        .from('medication_schedules')
+        .insert(scheduleEntries)
+        
+      if (scheduleError) throw scheduleError
+    }
+
     console.log('API: addMedication SUCCESS');
   },
 
@@ -58,10 +98,10 @@ export const api = {
   },
 
   deleteMedication: async (medId: string) => {
-    // Soft delete: set is_deleted = true. Past medication_logs stay intact.
+    // Hard delete: remove the medication from the database entirely
     const { error } = await supabase
       .from('medications')
-      .update({ is_deleted: true })
+      .delete()
       .eq('id', medId)
     if (error) throw error
   },
@@ -132,40 +172,24 @@ export const api = {
     return result
   },
 
-  logMedicationDose: async (medicationId: string, userId: string, status: 'taken' | 'skipped') => {
+  takeMedication: async (medicationId: string, scheduledAt?: string) => {
     const { error } = await supabase
       .from('medication_logs')
       .insert({
         medication_id: medicationId,
-        status: status,
-        logged_by: userId,
+        status: 'taken',
+        scheduled_at: scheduledAt,
         taken_at: new Date().toISOString()
       })
     if (error) throw error
   },
 
-  undoMedicationDose: async (medicationId: string) => {
-    // Find and delete the most recent 'taken' log for this medication today
-    const todayStart = new Date()
-    todayStart.setHours(0, 0, 0, 0)
-    
-    const { data: logs, error: findError } = await supabase
-      .from('medication_logs')
-      .select('id')
-      .eq('medication_id', medicationId)
-      .eq('status', 'taken')
-      .gte('taken_at', todayStart.toISOString())
-      .order('taken_at', { ascending: false })
-      .limit(1)
-    
-    if (findError) throw findError
-    if (!logs || logs.length === 0) return
-    
-    const { error: delError } = await supabase
+  undoMedication: async (logId: string) => {
+    const { error } = await supabase
       .from('medication_logs')
       .delete()
-      .eq('id', logs[0].id)
-    if (delError) throw delError
+      .eq('id', logId)
+    if (error) throw error
   },
 
   // Check-ins
@@ -291,6 +315,15 @@ export const api = {
 
   // Care Circles
   createCareCircleForLovedOne: async (userId: string, userName: string) => {
+    // Guard: if a loved_one entry already exists, return it (idempotent)
+    const { data: existing } = await supabase
+      .from('loved_ones')
+      .select('id')
+      .eq('user_id', userId)
+      .limit(1)
+      .maybeSingle()
+    if (existing) return existing.id
+
     // 1. Create a Circle
     const { data: circleData, error: circleError } = await supabase
       .from('care_circles')
@@ -341,16 +374,17 @@ export const api = {
   },
 
   getGiverTakersList: async (giverUserId: string) => {
-    // Find all circles the giver belongs to
+    // Find all circles the giver belongs to, including acceptance status
     const { data: memberData, error: memberError } = await supabase
       .from('care_circle_members')
-      .select('circle_id')
+      .select('circle_id, accepted_at')
       .eq('user_id', giverUserId)
       .eq('role', 'caregiver')
       
     if (memberError) throw memberError
     if (!memberData || memberData.length === 0) return []
 
+    const circleAcceptanceMap = new Map(memberData.map(m => [m.circle_id, m.accepted_at]))
     const circleIds = memberData.map(m => m.circle_id)
 
     // Find all loved ones (Takers) for those circles
@@ -360,7 +394,12 @@ export const api = {
       .in('circle_id', circleIds)
 
     if (lovedOnesError) throw lovedOnesError
-    return lovedOnesData || []
+    
+    // Attach the acceptance status to the taker object
+    return (lovedOnesData || []).map(t => ({
+      ...t,
+      accepted_at: circleAcceptanceMap.get(t.circle_id)
+    }))
   },
 
   getLovedOneCircleId: async (userId: string) => {
@@ -380,6 +419,27 @@ export const api = {
       .from('care_circle_members')
       .insert({ circle_id: circleId, user_id: userId, role: 'caregiver' })
     if (memberError) throw memberError
+  },
+
+  leaveCareCircle: async (caregiverUserId: string, circleId: string) => {
+    // Remove the caregiver's membership from a specific circle
+    const { error } = await supabase
+      .from('care_circle_members')
+      .delete()
+      .eq('circle_id', circleId)
+      .eq('user_id', caregiverUserId)
+      .eq('role', 'caregiver')
+    if (error) throw error
+  },
+
+  getTakerCircleId: async (lovedOneId: string) => {
+    const { data, error } = await supabase
+      .from('loved_ones')
+      .select('circle_id')
+      .eq('id', lovedOneId)
+      .maybeSingle()
+    if (error) throw error
+    return data?.circle_id || null
   },
 
   joinCareCircleByPhone: async (caregiverUserId: string, phone: string) => {
@@ -414,14 +474,32 @@ export const api = {
   },
 
   getCareCircleViewers: async (circleId: string) => {
-    // Get all caregivers in this circle (people who can see the user's data)
+    // Get all members in this circle using the explicit user_id foreign key
     const { data, error } = await supabase
       .from('care_circle_members')
-      .select('id, user_id, role, users(name_ko, email, phone_kr)')
+      .select(`
+        id, 
+        user_id, 
+        role, 
+        accepted_at,
+        users:user_id (
+          id, 
+          name_ko, 
+          email, 
+          phone_kr
+        )
+      `)
       .eq('circle_id', circleId)
-      .eq('role', 'caregiver')
     if (error) throw error
     return data || []
+  },
+
+  acceptCareCircleMember: async (memberId: string) => {
+    const { error } = await supabase
+      .from('care_circle_members')
+      .update({ accepted_at: new Date().toISOString() })
+      .eq('id', memberId)
+    if (error) throw error
   },
 
   removeCareCircleMember: async (memberId: string) => {

@@ -19,6 +19,13 @@ export default function UnifiedHome() {
 
   return (
     <div className="flex flex-col min-h-screen bg-secondary/10 pb-24">
+      <div className="bg-background pt-4 pb-2 px-4 flex flex-col items-center">
+        <div className="flex items-center gap-2 mb-2">
+          <img src="/carelink_logo.png" alt="CareLink Logo" className="w-8 h-8 rounded-lg shadow-sm" />
+          <span className="text-xl font-bold text-primary tracking-tight">CareLink</span>
+        </div>
+      </div>
+
       <div className="sticky top-0 z-10 bg-background/80 backdrop-blur-md pt-2 pb-4 px-4">
         <Tabs value={mode} onValueChange={(v) => setMode(v as 'taker' | 'giver')} className="w-full max-w-md mx-auto">
           <TabsList className="grid w-full grid-cols-2 h-12">

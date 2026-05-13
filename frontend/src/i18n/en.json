@@ -104,7 +104,10 @@
     "unit": "Unit",
     "taken": "Taken",
     "overview": "Overview",
-    "no_activity": "No activity yet."
+    "no_activity": "No activity yet.",
+    "disconnect": "Disconnect",
+    "disconnect_confirm": "Disconnect from {{name}}? You will no longer be able to view their health data.",
+    "disconnect_error": "Failed to disconnect"
   },
   "profile": {
     "title": "Profile",

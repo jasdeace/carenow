@@ -5,113 +5,103 @@ import { api } from '../lib/api'
 import { supabase } from '../lib/supabase'
 import { normalizePhone, formatPhone } from '../lib/phoneUtils'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Switch } from '@/components/ui/switch'
-import { Copy, Check, User, LogOut, Globe, Eye, HeartPulse, Droplets, Scale, Trash2 } from 'lucide-react'
+import { Badge } from '@/components/ui/badge'
+import { User, LogOut, Globe, HeartPulse, Trash2, Loader2 } from 'lucide-react'
 
 export default function Profile() {
   const { t, i18n } = useTranslation()
   const { user, profile, fetchProfile, signOut } = useAuthStore()
-  
-  const [circleId, setCircleId] = useState<string | null>(null)
-  const [copied, setCopied] = useState(false)
+
+
   const [phone, setPhone] = useState(formatPhone(profile?.phone_kr || ''))
-  const [email, setEmail] = useState('')
   const [isSaving, setIsSaving] = useState(false)
 
-  // Vitals toggle state (stored in localStorage for now)
+  // Vitals toggle state
   const [showBP, setShowBP] = useState(() => localStorage.getItem('vitals_show_bp') !== 'false')
   const [showGlucose, setShowGlucose] = useState(() => localStorage.getItem('vitals_show_glucose') !== 'false')
   const [showWeight, setShowWeight] = useState(() => localStorage.getItem('vitals_show_weight') !== 'false')
 
-  // Care circle viewers
-  const [viewers, setViewers] = useState<any[]>([])
+  // Connections
+  const [takers, setTakers] = useState<any[]>([])
+  const [loadingTakers, setLoadingTakers] = useState(false)
+  const [actionId, setActionId] = useState<string | null>(null)
 
   useEffect(() => {
     if (profile?.phone_kr) setPhone(formatPhone(profile.phone_kr))
-    const realEmail = profile?.email && !profile.email.endsWith('@carelink.app') ? profile.email : ''
-    setEmail(realEmail)
-  }, [profile?.phone_kr, profile?.email])
+  }, [profile?.phone_kr])
 
   useEffect(() => {
     if (user?.id) {
-      api.getLovedOneCircleId(user.id).then(id => {
-        if (id) {
-          setCircleId(id)
-          loadViewers(id)
-        } else {
-          api.createCareCircleForLovedOne(user.id, profile?.name_ko || 'User')
-            .then(() => api.getLovedOneCircleId(user.id!))
-            .then(realCircleId => {
-              setCircleId(realCircleId)
-              if (realCircleId) loadViewers(realCircleId)
-            })
-            .catch(e => console.error(e))
+      loadCircleInfo()
+      if (profile?.role === 'caregiver') {
+        loadTakers()
+      }
+    }
+  }, [user?.id, profile?.role])
+
+  const loadCircleInfo = async () => {
+    if (!user?.id) return
+    try {
+      let cId = await api.getLovedOneCircleId(user.id)
+      if (!cId) {
+        // Auto-create circle if it doesn't exist for Taker role
+        if (profile?.role === 'loved_one') {
+          await api.createCareCircleForLovedOne(user.id, profile?.name_ko || 'User')
         }
-      }).catch(console.error)
+      }
+    } catch (e) {
+      console.error('Failed to load circle info:', e)
     }
-  }, [user?.id])
+  }
 
-  const loadViewers = async (cId: string) => {
+  const loadTakers = async () => {
+    if (!user?.id) return
+    setLoadingTakers(true)
     try {
-      const data = await api.getCareCircleViewers(cId)
-      setViewers(data)
+      const data = await api.getGiverTakersList(user.id)
+      setTakers(data || [])
     } catch (e) {
       console.error(e)
+    } finally {
+      setLoadingTakers(false)
     }
   }
 
-  const handleRemoveViewer = async (memberId: string) => {
+
+
+  const handleDisconnectTaker = async (taker: any) => {
+    if (!user?.id) return
+    setActionId(taker.id)
     try {
-      await api.removeCareCircleMember(memberId)
-      alert(t('profile.removed'))
-      if (circleId) loadViewers(circleId)
+      const cId = taker.circle_id || await api.getTakerCircleId(taker.id)
+      if (cId) {
+        await api.leaveCareCircle(user.id, cId)
+        setTakers(prev => prev.filter(t => t.id !== taker.id))
+      }
     } catch (e) {
       console.error(e)
+      alert(t('caregiver.disconnect_error'))
+    } finally {
+      setActionId(null)
     }
   }
 
-  const copyToClipboard = () => {
-    if (circleId) {
-      navigator.clipboard.writeText(circleId)
-      setCopied(true)
-      setTimeout(() => setCopied(false), 2000)
-    }
-  }
+
 
   const handleSavePhone = async () => {
     if (!user?.id) return
     setIsSaving(true)
     try {
       const normalized = normalizePhone(phone)
-      const { error } = await supabase
-        .from('users')
-        .update({ phone_kr: normalized })
-        .eq('id', user.id)
+      const { error } = await supabase.from('users').update({ phone_kr: normalized }).eq('id', user.id)
       if (error) throw error
       await fetchProfile(user.id)
       alert(t('profile.phone_saved'))
-    } catch (e: any) {
-      alert(e.message)
-    } finally {
-      setIsSaving(false)
-    }
-  }
-
-  const handleSaveEmail = async () => {
-    if (!user?.id || !email) return
-    setIsSaving(true)
-    try {
-      const { error } = await supabase
-        .from('users')
-        .update({ email })
-        .eq('id', user.id)
-      if (error) throw error
-      await fetchProfile(user.id)
-      alert(t('profile.email_saved'))
     } catch (e: any) {
       alert(e.message)
     } finally {
@@ -129,6 +119,10 @@ export default function Profile() {
     }
   }
 
+  const handleLanguageChange = (lang: string) => {
+    i18n.changeLanguage(lang)
+  }
+
   const handleToggleBP = (v: boolean) => {
     setShowBP(v)
     localStorage.setItem('vitals_show_bp', v.toString())
@@ -142,18 +136,61 @@ export default function Profile() {
     localStorage.setItem('vitals_show_weight', v.toString())
   }
 
-  const currentRealEmail = profile?.email && !profile.email.endsWith('@carelink.app') ? profile.email : null
 
-  const handleLanguageChange = (lng: string) => {
-    i18n.changeLanguage(lng)
-  }
 
   return (
     <div className="flex flex-col min-h-screen bg-secondary/20 px-4 pt-8 pb-24 space-y-6 max-w-md mx-auto">
-      <div className="space-y-2">
+      <div className="space-y-2 text-center sm:text-left">
         <h1 className="text-3xl font-bold text-foreground">{t('profile.title')}</h1>
         <p className="text-lg text-muted-foreground">{t('profile.subtitle')}</p>
       </div>
+
+
+
+      {/* People I Care For (Giver side) */}
+      {profile?.role === 'caregiver' && (
+        <Card className="rounded-2xl shadow-md border-0 bg-background overflow-hidden">
+          <CardHeader className="pb-3 bg-rose-50/50 dark:bg-rose-950/10">
+            <CardTitle className="text-xl flex items-center gap-2">
+              <HeartPulse className="text-rose-500 w-6 h-6" />
+              {t('caregiver.my_takers')}
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="p-4 space-y-3">
+            {loadingTakers ? (
+              <div className="flex justify-center py-4"><Loader2 className="animate-spin text-rose-500" /></div>
+            ) : takers.length === 0 ? (
+              <p className="text-sm text-muted-foreground text-center py-4">{t('caregiver.no_takers')}</p>
+            ) : (
+              takers.map((taker) => (
+                <div key={taker.id} className="flex items-center justify-between p-3 bg-secondary/20 rounded-xl border border-secondary/50">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-full bg-rose-500/10 flex items-center justify-center">
+                      <User className="w-5 h-5 text-rose-500" />
+                    </div>
+                    <div className="flex flex-col">
+                      <div className="flex items-center gap-2">
+                        <p className="font-semibold text-sm">{taker.display_name_ko || 'Taker'}</p>
+                        {!taker.accepted_at && <Badge variant="outline" className="text-[10px] h-4 px-1.5 border-amber-300 text-amber-700 bg-amber-50">{t('common.pending')}</Badge>}
+                      </div>
+                      {!taker.accepted_at && <p className="text-[10px] text-amber-600 mt-0.5">{t('caregiver.awaiting_acceptance')}</p>}
+                    </div>
+                  </div>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="text-destructive hover:bg-destructive/10 h-8 px-2 rounded-full"
+                    onClick={() => handleDisconnectTaker(taker)}
+                    disabled={!!actionId}
+                  >
+                    {actionId === taker.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <><Trash2 className="w-4 h-4 mr-1" /> {t('common.delete')}</>}
+                  </Button>
+                </div>
+              ))
+            )}
+          </CardContent>
+        </Card>
+      )}
 
       {/* Language Toggle */}
       <Card className="rounded-2xl shadow-md border-0 bg-background">
@@ -176,21 +213,21 @@ export default function Profile() {
 
       {/* My Info */}
       <Card className="rounded-2xl shadow-md border-0 bg-background">
-        <CardHeader className="pb-3">
-          <CardTitle className="text-2xl flex items-center gap-2">
-            <User className="text-primary w-8 h-8" />
+        <CardHeader>
+          <CardTitle className="text-xl flex items-center gap-2">
+            <User className="text-primary w-6 h-6" />
             {t('profile.my_info')}
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="space-y-2">
-            <Label className="text-lg">{t('profile.name')}</Label>
-            <Input disabled value={profile?.name_ko || ''} className="h-14 text-lg bg-secondary/50" />
+            <Label>{t('profile.name')}</Label>
+            <Input disabled value={profile?.name_ko || ''} className="h-12 bg-secondary/50" />
           </div>
           <div className="space-y-2">
-            <Label className="text-lg">{t('profile.change_role')}</Label>
+            <Label>{t('profile.change_role')}</Label>
             <Select value={profile?.role || 'loved_one'} onValueChange={handleRoleChange}>
-              <SelectTrigger className="h-14 text-lg">
+              <SelectTrigger className="h-12">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -200,128 +237,43 @@ export default function Profile() {
             </Select>
           </div>
           <div className="space-y-2">
-            <Label className="text-lg">{t('profile.phone')}</Label>
+            <Label>{t('profile.phone')}</Label>
             <div className="flex gap-2">
-              <Input 
-                value={phone} 
-                onChange={(e) => setPhone(formatPhone(e.target.value))}
-                placeholder="010-XXXX-XXXX" 
-                className="h-14 text-lg" 
-              />
-              <Button onClick={handleSavePhone} disabled={isSaving || normalizePhone(phone) === profile?.phone_kr} className="h-14 px-6 text-lg">
+              <Input value={phone} onChange={(e) => setPhone(formatPhone(e.target.value))} placeholder="010-1234-5678" className="h-12" />
+              <Button onClick={handleSavePhone} disabled={isSaving || normalizePhone(phone) === profile?.phone_kr} className="h-12 px-6">
                 {t('profile.save')}
               </Button>
             </div>
           </div>
-          <div className="space-y-2">
-            <Label className="text-lg">{t('profile.email')}</Label>
-            <div className="flex gap-2">
-              <Input 
-                type="email"
-                value={email} 
-                onChange={(e) => setEmail(e.target.value)}
-                placeholder={t('profile.email_placeholder')}
-                className="h-14 text-lg" 
-              />
-              <Button onClick={handleSaveEmail} disabled={isSaving || !email || email === currentRealEmail} className="h-14 px-6 text-lg">
-                {t('profile.save')}
-              </Button>
-            </div>
-            <p className="text-xs text-muted-foreground">{t('profile.email_hint')}</p>
-          </div>
         </CardContent>
       </Card>
 
-      {/* Circle Code */}
+      {/* Vitals Settings */}
       <Card className="rounded-2xl shadow-md border-0 bg-background">
-        <CardHeader className="pb-3">
-          <CardTitle className="text-2xl">{t('profile.circle_code')}</CardTitle>
-          <CardDescription>{t('profile.circle_code_desc')}</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="flex items-center gap-2">
-            <Input readOnly value={circleId || t('common.loading')} className="h-14 text-lg bg-secondary/50" />
-            <Button onClick={copyToClipboard} variant="outline" className="h-14 px-4">
-              {copied ? <Check className="w-6 h-6 text-green-500" /> : <Copy className="w-6 h-6" />}
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Vitals Display Settings */}
-      <Card className="rounded-2xl shadow-md border-0 bg-background">
-        <CardHeader className="pb-3">
-          <CardTitle className="text-2xl flex items-center gap-2">
-            <HeartPulse className="text-rose-500 w-7 h-7" />
+        <CardHeader>
+          <CardTitle className="text-xl flex items-center gap-2">
+            <HeartPulse className="text-rose-500 w-6 h-6" />
             {t('profile.vitals_settings')}
           </CardTitle>
         </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="flex items-center justify-between py-2">
-            <div className="flex items-center gap-3">
-              <HeartPulse className="w-5 h-5 text-rose-500" />
-              <span className="text-lg">{t('profile.show_bp')}</span>
-            </div>
+        <CardContent className="space-y-3">
+          <div className="flex items-center justify-between py-1">
+            <span className="text-base">{t('profile.show_bp')}</span>
             <Switch checked={showBP} onCheckedChange={handleToggleBP} />
           </div>
-          <div className="flex items-center justify-between py-2">
-            <div className="flex items-center gap-3">
-              <Droplets className="w-5 h-5 text-blue-500" />
-              <span className="text-lg">{t('profile.show_glucose')}</span>
-            </div>
+          <div className="flex items-center justify-between py-1">
+            <span className="text-base">{t('profile.show_glucose')}</span>
             <Switch checked={showGlucose} onCheckedChange={handleToggleGlucose} />
           </div>
-          <div className="flex items-center justify-between py-2">
-            <div className="flex items-center gap-3">
-              <Scale className="w-5 h-5 text-emerald-500" />
-              <span className="text-lg">{t('profile.show_weight')}</span>
-            </div>
+          <div className="flex items-center justify-between py-1">
+            <span className="text-base">{t('profile.show_weight')}</span>
             <Switch checked={showWeight} onCheckedChange={handleToggleWeight} />
           </div>
         </CardContent>
       </Card>
 
-      {/* Who Sees My Data */}
-      <Card className="rounded-2xl shadow-md border-0 bg-background">
-        <CardHeader className="pb-3">
-          <CardTitle className="text-2xl flex items-center gap-2">
-            <Eye className="text-primary w-7 h-7" />
-            {t('profile.who_sees')}
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-3">
-          {viewers.length === 0 ? (
-            <p className="text-muted-foreground text-center py-4">{t('profile.no_viewers')}</p>
-          ) : (
-            viewers.map((v) => {
-              const userInfo = v.users as any
-              const displayName = userInfo?.name_ko || userInfo?.email || '알 수 없음'
-              return (
-                <div key={v.id} className="flex items-center justify-between bg-secondary/30 rounded-xl px-4 py-3">
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center">
-                      <User className="w-5 h-5 text-primary" />
-                    </div>
-                    <div>
-                      <p className="font-medium text-base">{displayName}</p>
-                      {userInfo?.phone_kr && (
-                        <p className="text-sm text-muted-foreground">{formatPhone(userInfo.phone_kr)}</p>
-                      )}
-                    </div>
-                  </div>
-                  <Button variant="ghost" size="sm" className="text-destructive/60 hover:text-destructive hover:bg-destructive/10 h-9 px-3 rounded-full" onClick={() => handleRemoveViewer(v.id)}>
-                    <Trash2 className="w-4 h-4 mr-1" />
-                    {t('profile.remove_viewer')}
-                  </Button>
-                </div>
-              )
-            })
-          )}
-        </CardContent>
-      </Card>
-
-      <Button onClick={() => signOut()} variant="destructive" className="w-full h-16 text-xl rounded-xl mt-8">
-        <LogOut className="w-6 h-6 mr-2" />
+      <Button onClick={() => signOut()} variant="ghost" className="w-full h-14 text-destructive hover:bg-destructive/10 rounded-xl mt-4">
+        <LogOut className="w-5 h-5 mr-2" />
         {t('profile.signout')}
       </Button>
     </div>

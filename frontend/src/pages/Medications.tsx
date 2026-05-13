@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useAuthStore } from '../stores/authStore'
-import { api } from '../lib/api'
+import { api, cleanDrugName } from '../lib/api'
 import { processImageOCR } from '../lib/ocrService'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
@@ -23,6 +23,7 @@ export default function Medications() {
   const [medName, setMedName] = useState('')
   const [dosageAmt, setDosageAmt] = useState('')
   const [dosageUnit, setDosageUnit] = useState('mg')
+  const [scheduleTimes, setScheduleTimes] = useState<string[]>(['09:00'])
   const [ocrLoading, setOcrLoading] = useState(false)
   
   // Drug API search state
@@ -65,6 +66,15 @@ export default function Medications() {
     }
   }
 
+  const handleToggleActive = async (medId: string, currentStatus: boolean) => {
+    try {
+      await api.toggleMedicationActive(medId, !currentStatus)
+      loadMeds()
+    } catch (e) {
+      console.error(e)
+    }
+  }
+
   const handleDeleteMed = async (medId: string) => {
     try {
       await api.deleteMedication(medId)
@@ -74,6 +84,14 @@ export default function Medications() {
     }
   }
 
+  const addScheduleTime = () => setScheduleTimes([...scheduleTimes, '09:00'])
+  const removeScheduleTime = (index: number) => setScheduleTimes(scheduleTimes.filter((_, i) => i !== index))
+  const updateScheduleTime = (index: number, val: string) => {
+    const next = [...scheduleTimes]
+    next[index] = val
+    setScheduleTimes(next)
+  }
+
   const handleManualAdd = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!profile?.loved_one_id) {
@@ -81,10 +99,10 @@ export default function Medications() {
       return;
     }
     try {
-      console.log('Attempting to save medication:', { medName, dosageAmt, dosageUnit });
-      await api.addMedication(profile.loved_one_id, medName, String(dosageAmt), dosageUnit, profile.id)
+      console.log('Attempting to save medication:', { medName, dosageAmt, dosageUnit, scheduleTimes });
+      await api.addMedication(profile.loved_one_id, medName, String(dosageAmt), dosageUnit, profile.id, scheduleTimes)
       setIsAddOpen(false)
-      setMedName(''); setDosageAmt(''); setDosageUnit('mg')
+      setMedName(''); setDosageAmt(''); setDosageUnit('mg'); setScheduleTimes(['09:00'])
       alert('새로운 약이 추가되었습니다.');
       await loadMeds() // Refresh real data
     } catch (err: any) {
@@ -112,13 +130,13 @@ export default function Medications() {
           
           // Basic heuristic to extract med name from raw text for MVP
           if (result.parsedData) {
-            setMedName(result.parsedData.medicationName || '')
+            setMedName(cleanDrugName(result.parsedData.medicationName || ''))
             setDosageAmt(result.parsedData.dosageAmount || '')
             setDosageUnit(result.parsedData.dosageUnit || 'mg')
           } else {
             // Very rough Tesseract fallback parse
             const text = result.rawText
-            setMedName(text.split('\n')[0] || 'Unknown Med')
+            setMedName(cleanDrugName(text.split('\n')[0] || 'Unknown Med'))
             setDosageAmt('1')
           }
         } catch (err) {
@@ -165,7 +183,7 @@ export default function Medications() {
   }
 
   const selectDrug = (drug: any) => {
-    setMedName(drug.itemName)
+    setMedName(cleanDrugName(drug.itemName))
     setShowDrugResults(false)
     setDrugResults([])
   }
@@ -273,30 +291,49 @@ export default function Medications() {
                     </div>
                   )}
                 </div>
-                <div className="flex gap-4">
-                  <div className="space-y-2 flex-1">
-                    <Label htmlFor="dosageAmt">{t('meds.dosage_amt')}</Label>
+                <div className="space-y-3">
+                  <Label>{t('meds.dosage_amt')} / {t('meds.dosage_unit')}</Label>
+                  <div className="flex gap-2">
                     <Input 
-                      id="dosageAmt"
-                      name="dosageAmt"
                       required 
                       type="text" 
                       value={dosageAmt} 
                       onChange={e => setDosageAmt(e.target.value)} 
-                      className="h-14 text-lg" 
+                      className="h-12 flex-[2] text-lg" 
                       placeholder="e.g. 10 or 10/60" 
                     />
-                  </div>
-                  <div className="space-y-2 flex-1">
-                    <Label htmlFor="dosageUnit">{t('meds.dosage_unit')}</Label>
                     <Input 
-                      id="dosageUnit"
-                      name="dosageUnit"
                       required 
                       value={dosageUnit} 
                       onChange={e => setDosageUnit(e.target.value)} 
-                      className="h-14 text-lg" 
+                      className="h-12 flex-1 text-lg" 
                     />
+                  </div>
+                </div>
+
+                <div className="space-y-3">
+                  <div className="flex justify-between items-center">
+                    <Label>복용 시간 (하루 {scheduleTimes.length}회)</Label>
+                    <Button type="button" variant="ghost" size="sm" onClick={addScheduleTime} className="h-8 text-primary">
+                      <Plus className="w-4 h-4 mr-1" /> 추가
+                    </Button>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2">
+                    {scheduleTimes.map((time, idx) => (
+                      <div key={idx} className="flex items-center gap-1">
+                        <Input 
+                          type="time" 
+                          value={time} 
+                          onChange={(e) => updateScheduleTime(idx, e.target.value)}
+                          className="h-10 text-sm"
+                        />
+                        {scheduleTimes.length > 1 && (
+                          <Button type="button" variant="ghost" size="icon" onClick={() => removeScheduleTime(idx)} className="h-10 w-10 text-destructive">
+                            <Trash2 className="w-4 h-4" />
+                          </Button>
+                        )}
+                      </div>
+                    ))}
                   </div>
                 </div>
                 <Button type="submit" className="w-full h-16 text-xl rounded-xl mt-4">
@@ -349,24 +386,49 @@ export default function Medications() {
           </Card>
         ) : (
           meds.map(med => (
-            <Card key={med.id} className="rounded-2xl shadow-sm border-0 bg-background">
-              <CardContent className="p-4 flex items-center justify-between">
-                <div className="flex items-center gap-4 flex-1 cursor-pointer" onClick={() => lookupDrugDetail(med.name_ko || med.name_en)}>
-                  <div className="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center text-primary">
-                    <Pill className="w-6 h-6" />
+            <Card key={med.id} className={`rounded-2xl shadow-sm border-0 overflow-hidden transition-all ${med.is_active ? 'bg-background' : 'bg-secondary/40 opacity-75'}`}>
+              <CardContent className="p-0">
+                <div className="p-4 flex items-center justify-between">
+                  <div className="flex items-center gap-4 flex-1 cursor-pointer" onClick={() => lookupDrugDetail(med.name_ko || med.name_en)}>
+                    <div className={`w-12 h-12 rounded-full flex items-center justify-center ${med.is_active ? 'bg-primary/10 text-primary' : 'bg-muted text-muted-foreground'}`}>
+                      <Pill className="w-6 h-6" />
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <h3 className="text-xl font-medium">{med.name_ko || med.name_en}</h3>
+                        {!med.is_active && <Badge variant="secondary" className="text-[10px] h-4">비활성</Badge>}
+                      </div>
+                      <p className="text-muted-foreground">{med.dosage_amount}{med.dosage_unit}</p>
+                    </div>
                   </div>
-                  <div>
-                    <h3 className="text-xl font-medium">{med.name_ko || med.name_en}</h3>
-                    <p className="text-muted-foreground">{med.dosage_amount}{med.dosage_unit}</p>
+                  <div className="flex items-center gap-2">
+                    <div className="flex flex-col items-center gap-1 mr-2">
+                      <span className="text-[10px] text-muted-foreground uppercase font-bold">{med.is_active ? 'ON' : 'OFF'}</span>
+                      <button 
+                        onClick={() => handleToggleActive(med.id, med.is_active)}
+                        className={`w-10 h-6 rounded-full transition-colors relative flex items-center px-1 ${med.is_active ? 'bg-primary' : 'bg-muted-foreground/30'}`}
+                      >
+                        <div className={`w-4 h-4 bg-white rounded-full shadow-sm transition-transform ${med.is_active ? 'translate-x-4' : 'translate-x-0'}`} />
+                      </button>
+                    </div>
+                    <Button variant="ghost" size="icon" onClick={() => handleDeleteMed(med.id)} className="text-destructive hover:bg-destructive/10">
+                      <Trash2 className="w-5 h-5" />
+                    </Button>
                   </div>
                 </div>
-                <div className="flex items-center gap-1">
-                  <Button variant="ghost" size="icon" onClick={() => lookupDrugDetail(med.name_ko || med.name_en)} className="text-primary/60 hover:text-primary">
-                    <Info className="w-5 h-5" />
-                  </Button>
-                  <Button variant="ghost" size="icon" onClick={() => handleDeleteMed(med.id)} className="text-destructive hover:text-destructive hover:bg-destructive/10">
-                    <Trash2 className="w-5 h-5" />
-                  </Button>
+                
+                {/* Expanded Section for schedules */}
+                <div className="px-4 pb-4 pt-0 border-t border-secondary/50 mt-1">
+                  <div className="flex flex-wrap gap-2 pt-3">
+                    {med.medication_schedules?.map((s: any, idx: number) => (
+                      <Badge key={idx} variant="outline" className="bg-primary/5 text-primary border-primary/20 flex items-center gap-1">
+                        <Loader2 className="w-3 h-3 text-primary/50" /> {s.time_of_day?.substring(0, 5)}
+                      </Badge>
+                    ))}
+                    <Button variant="ghost" size="icon" onClick={() => lookupDrugDetail(med.name_ko || med.name_en)} className="w-6 h-6 ml-auto">
+                      <Info className="w-4 h-4 text-primary/60" />
+                    </Button>
+                  </div>
                 </div>
               </CardContent>
             </Card>

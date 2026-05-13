@@ -7,8 +7,9 @@ import { formatPhone } from '../lib/phoneUtils'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { Button } from '@/components/ui/button'
+import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
-import { Loader2, UserPlus, Heart, ChevronRight } from 'lucide-react'
+import { Loader2, UserPlus, Heart, ChevronRight, Trash2 } from 'lucide-react'
 
 export default function GiverHome() {
   const { t } = useTranslation()
@@ -19,6 +20,7 @@ export default function GiverHome() {
   const [takers, setTakers] = useState<any[]>([])
   const [inviteCode, setInviteCode] = useState('')
   const [joining, setJoining] = useState(false)
+  const [disconnecting, setDisconnecting] = useState<string | null>(null)
 
   useEffect(() => {
     if (user?.id) fetchTakers()
@@ -34,6 +36,29 @@ export default function GiverHome() {
       console.error(e)
     } finally {
       setLoading(false)
+    }
+  }
+
+  const handleDisconnect = async (e: React.MouseEvent, taker: any) => {
+    e.stopPropagation() // Prevent card click (navigation)
+    if (!user?.id) return
+
+    const name = taker.display_name_ko || 'Taker'
+    const confirmed = window.confirm(t('caregiver.disconnect_confirm', { name }))
+    if (!confirmed) return
+
+    setDisconnecting(taker.id)
+    try {
+      // Resolve the circle_id from the loved_one record, then leave it
+      const circleId = taker.circle_id || await api.getTakerCircleId(taker.id)
+      if (!circleId) throw new Error('Circle not found')
+      await api.leaveCareCircle(user.id, circleId)
+      await fetchTakers()
+    } catch (err: any) {
+      console.error(err)
+      alert(t('caregiver.disconnect_error') + ': ' + err.message)
+    } finally {
+      setDisconnecting(null)
     }
   }
 
@@ -84,8 +109,12 @@ export default function GiverHome() {
             {takers.map(taker => (
               <Card 
                 key={taker.id} 
-                className="cursor-pointer hover:bg-secondary/20 transition-colors"
-                onClick={() => navigate(`/giver/dashboard/${taker.id}`)}
+                className={`transition-colors ${!taker.accepted_at ? 'opacity-70 cursor-not-allowed border-amber-200 bg-amber-50/10' : 'cursor-pointer hover:bg-secondary/20'}`}
+                onClick={() => {
+                  if (taker.accepted_at) {
+                    navigate(`/giver/dashboard/${taker.id}`)
+                  }
+                }}
               >
                 <CardContent className="p-4 flex items-center justify-between">
                   <div className="flex items-center gap-4">
@@ -95,11 +124,34 @@ export default function GiverHome() {
                       </AvatarFallback>
                     </Avatar>
                     <div>
-                      <h3 className="font-semibold text-lg">{taker.display_name_ko || 'Taker'}</h3>
-                      <p className="text-sm text-muted-foreground">{t('caregiver.view_dashboard')}</p>
+                      <div className="flex items-center gap-2">
+                        <h3 className="font-semibold text-lg">{taker.display_name_ko || 'Taker'}</h3>
+                        {!taker.accepted_at && <Badge variant="outline" className="text-[10px] h-4 px-1.5 border-amber-300 text-amber-700 bg-amber-50">{t('common.pending')}</Badge>}
+                      </div>
+                      <p className="text-sm text-muted-foreground">
+                        {taker.accepted_at ? t('caregiver.view_dashboard') : t('caregiver.awaiting_acceptance')}
+                      </p>
                     </div>
                   </div>
-                  <ChevronRight className="w-6 h-6 text-muted-foreground" />
+                  <div className="flex items-center gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="h-9 px-3 text-destructive border-destructive/20 hover:bg-destructive/10 rounded-full flex items-center gap-1"
+                      onClick={(e) => handleDisconnect(e, taker)}
+                      disabled={disconnecting === taker.id}
+                    >
+                      {disconnecting === taker.id ? (
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                      ) : (
+                        <>
+                          <Trash2 className="w-4 h-4" />
+                          <span className="text-sm font-medium">{t('common.delete')}</span>
+                        </>
+                      )}
+                    </Button>
+                    <ChevronRight className="w-5 h-5 text-muted-foreground" />
+                  </div>
                 </CardContent>
               </Card>
             ))}

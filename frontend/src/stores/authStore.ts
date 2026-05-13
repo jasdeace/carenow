@@ -22,6 +22,9 @@ interface AuthState {
   signOut: () => Promise<void>
 }
 
+// Guard against concurrent fetchProfile calls (the race condition root cause)
+let _fetchInProgress: Promise<void> | null = null
+
 export const useAuthStore = create<AuthState>((set) => ({
   user: null,
   profile: null,
@@ -31,51 +34,44 @@ export const useAuthStore = create<AuthState>((set) => ({
   setProfile: (profile) => set({ profile }),
 
   fetchProfile: async (userId) => {
-    set({ isLoading: true })
-    const { data, error } = await supabase
-      .from('users')
-      .select('id, email, name_ko, phone_kr, role, tier')
-      .eq('id', userId)
-      .single()
+    // If a fetch is already in progress for this user, wait for it instead of starting a new one
+    if (_fetchInProgress) {
+      await _fetchInProgress
+      return
+    }
 
-    if (error) {
-      console.error('Error fetching profile:', error)
-    } else {
-      // Resolve loved_one_id for ALL users (anyone can take meds regardless of role)
-      let loved_one_id: string | null = null
+    const doFetch = async () => {
+      set({ isLoading: true })
+      const { data, error } = await supabase
+        .from('users')
+        .select('id, email, name_ko, phone_kr, role, tier')
+        .eq('id', userId)
+        .single()
+
+      if (error) {
+        console.error('Error fetching profile:', error)
+        set({ isLoading: false })
+        return
+      }
+
+      // Resolve loved_one_id — just look it up, never auto-create here
       const { data: loData } = await supabase
         .from('loved_ones')
         .select('id')
         .eq('user_id', userId)
         .limit(1)
         .maybeSingle()
-      loved_one_id = loData?.id || null
 
-      // Auto-provision a care circle + loved_one entry if none exists
-      if (!loved_one_id) {
-        try {
-          const displayName = data.name_ko || data.email || 'User'
-          const { data: circleData } = await supabase
-            .from('care_circles')
-            .insert({ name: `${displayName}'s Circle`, created_by: userId })
-            .select('id')
-            .single()
-          if (circleData) {
-            const { data: newLo } = await supabase
-              .from('loved_ones')
-              .insert({ circle_id: circleData.id, user_id: userId, display_name_ko: displayName })
-              .select('id')
-              .single()
-            loved_one_id = newLo?.id || null
-          }
-        } catch (e) {
-          console.error('Auto-provision loved_one failed:', e)
-        }
-      }
-
-      set({ profile: { ...data, loved_one_id } })
+      set({ profile: { ...data, loved_one_id: loData?.id || null } })
+      set({ isLoading: false })
     }
-    set({ isLoading: false })
+
+    _fetchInProgress = doFetch()
+    try {
+      await _fetchInProgress
+    } finally {
+      _fetchInProgress = null
+    }
   },
 
   signOut: async () => {

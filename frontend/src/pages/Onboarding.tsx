@@ -46,9 +46,8 @@ export default function Onboarding() {
     }
 
     try {
-      if (role === 'loved_one') {
-        await api.createCareCircleForLovedOne(user.id, name)
-      }
+      // Every user needs a care circle + loved_one entry (for meds, vitals, labs)
+      await api.createCareCircleForLovedOne(user.id, name)
       await fetchProfile(user.id)
       navigate('/')
     } catch (apiError: any) {

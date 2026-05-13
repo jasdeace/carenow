@@ -37,8 +37,14 @@ export default function Login() {
   }
 
   return (
-    <div className="flex h-screen w-full items-center justify-center px-4 bg-secondary/30">
-      <Card className="w-full max-w-sm">
+    <div className="flex flex-col h-screen w-full items-center justify-center px-4 bg-secondary/30">
+      <div className="flex flex-col items-center mb-8">
+        <img src="/carelink_logo.png" alt="CareLink Logo" className="w-20 h-20 rounded-3xl shadow-xl mb-4" />
+        <h1 className="text-4xl font-extrabold text-primary tracking-tighter">CareLink</h1>
+        <p className="text-muted-foreground text-sm font-medium mt-1">Care Circle Connection & Med Management</p>
+      </div>
+
+      <Card className="w-full max-w-sm shadow-2xl border-0">
         <CardHeader className="space-y-1">
           <CardTitle className="text-2xl font-bold">{t('auth.login_title')}</CardTitle>
           <CardDescription>{t('auth.login_desc')}</CardDescription>
