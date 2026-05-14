@@ -89,6 +89,48 @@ export const api = {
     console.log('API: addMedication SUCCESS');
   },
 
+  updateMedication: async (medId: string, name_ko: string, dosage_amount: string, dosage_unit: string, scheduleTimes: string[]) => {
+    console.log('API: updateMedication payload:', { medId, name_ko, dosage_amount, dosage_unit, scheduleTimes });
+    
+    // 1. Update Medication
+    const { error: medError } = await supabase
+      .from('medications')
+      .update({
+        name_ko: cleanDrugName(name_ko),
+        dosage_amount,
+        dosage_unit,
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', medId)
+
+    if (medError) throw medError
+
+    // 2. Delete existing schedules
+    const { error: deleteError } = await supabase
+      .from('medication_schedules')
+      .delete()
+      .eq('medication_id', medId)
+
+    if (deleteError) throw deleteError
+
+    // 3. Insert new schedules
+    if (scheduleTimes && scheduleTimes.length > 0) {
+      const scheduleEntries = scheduleTimes.map(time => ({
+        medication_id: medId,
+        time_of_day: time,
+        frequency: 'daily'
+      }))
+      
+      const { error: scheduleError } = await supabase
+        .from('medication_schedules')
+        .insert(scheduleEntries)
+        
+      if (scheduleError) throw scheduleError
+    }
+    
+    console.log('API: updateMedication SUCCESS');
+  },
+
   acceptMedication: async (medId: string) => {
     const { error } = await supabase
       .from('medications')
@@ -150,9 +192,10 @@ export const api = {
     
     const { data: logs, error: logsError } = await supabase
       .from('medication_logs')
-      .select('taken_at, status')
+      .select('taken_at, scheduled_at, status')
       .in('medication_id', meds.map(m => m.id))
-      .gte('taken_at', sevenDaysAgo.toISOString())
+      // Using an OR condition because some old logs might not have scheduled_at
+      .or(`scheduled_at.gte.${sevenDaysAgo.toISOString()},taken_at.gte.${sevenDaysAgo.toISOString()}`)
 
     if (logsError) throw logsError
 
@@ -163,7 +206,11 @@ export const api = {
       d.setDate(d.getDate() - i)
       const dateStr = d.toDateString()
       
-      const takenCount = logs?.filter(l => l.status === 'taken' && new Date(l.taken_at).toDateString() === dateStr).length || 0
+      const takenCount = logs?.filter(l => {
+        if (l.status !== 'taken') return false;
+        const logDate = l.scheduled_at ? new Date(l.scheduled_at).toDateString() : new Date(l.taken_at).toDateString();
+        return logDate === dateStr;
+      }).length || 0
       
       const rate = Math.min(100, Math.round((takenCount / totalMeds) * 100))
       result.push({ day: formatLabel(d), rate })
@@ -172,14 +219,14 @@ export const api = {
     return result
   },
 
-  takeMedication: async (medicationId: string, scheduledAt?: string) => {
+  takeMedication: async (medicationId: string, scheduledAt?: string, takenAtOverride?: string) => {
     const { error } = await supabase
       .from('medication_logs')
       .insert({
         medication_id: medicationId,
         status: 'taken',
         scheduled_at: scheduledAt,
-        taken_at: new Date().toISOString()
+        taken_at: takenAtOverride || new Date().toISOString()
       })
     if (error) throw error
   },

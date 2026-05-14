@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useAuthStore } from '../stores/authStore'
 import { api, cleanDrugName } from '../lib/api'
+import { notificationService } from '../lib/notifications'
 import { processImageOCR } from '../lib/ocrService'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
@@ -9,7 +10,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
 import { Badge } from '@/components/ui/badge'
-import { Pill, Plus, Camera, Loader2, Check, Trash2, Search, Info } from 'lucide-react'
+import { Pill, Plus, Camera, Loader2, Check, Trash2, Search, Info, Pencil } from 'lucide-react'
 
 export default function Medications() {
   const { t } = useTranslation()
@@ -18,6 +19,8 @@ export default function Medications() {
   const [meds, setMeds] = useState<any[]>([])
   const [pendingMeds, setPendingMeds] = useState<any[]>([])
   const [isAddOpen, setIsAddOpen] = useState(false)
+  const [isEditOpen, setIsEditOpen] = useState(false)
+  const [editingMed, setEditingMed] = useState<any>(null)
 
   // Add Med Form State
   const [medName, setMedName] = useState('')
@@ -69,6 +72,10 @@ export default function Medications() {
   const handleToggleActive = async (medId: string, currentStatus: boolean) => {
     try {
       await api.toggleMedicationActive(medId, !currentStatus)
+      if (currentStatus) {
+        // If toggling off, cancel all reminders
+        await notificationService.cancelAllReminders(medId)
+      }
       loadMeds()
     } catch (e) {
       console.error(e)
@@ -78,6 +85,7 @@ export default function Medications() {
   const handleDeleteMed = async (medId: string) => {
     try {
       await api.deleteMedication(medId)
+      await notificationService.cancelAllReminders(medId)
       loadMeds()
     } catch (e) {
       console.error(e)
@@ -108,6 +116,31 @@ export default function Medications() {
     } catch (err: any) {
       console.error(err)
       alert(`Failed to add medication: ${err.message || 'Unknown error'}`)
+    }
+  }
+
+  const handleEditOpen = (med: any) => {
+    setEditingMed(med)
+    setMedName(med.name_ko || med.name_en || '')
+    setDosageAmt(String(med.dosage_amount || ''))
+    setDosageUnit(med.dosage_unit || 'mg')
+    setScheduleTimes(med.medication_schedules?.map((s: any) => s.time_of_day?.substring(0, 5)) || ['09:00'])
+    setIsEditOpen(true)
+  }
+
+  const handleEditSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!editingMed) return
+    try {
+      await api.updateMedication(editingMed.id, medName, dosageAmt, dosageUnit, scheduleTimes)
+      setIsEditOpen(false)
+      setEditingMed(null)
+      setMedName(''); setDosageAmt(''); setDosageUnit('mg'); setScheduleTimes(['09:00'])
+      alert('약 정보가 수정되었습니다.');
+      await loadMeds()
+    } catch (err: any) {
+      console.error(err)
+      alert(`Failed to update medication: ${err.message || 'Unknown error'}`)
     }
   }
 
@@ -208,7 +241,7 @@ export default function Medications() {
   }
 
   return (
-    <div className="flex flex-col min-h-screen bg-secondary/20 px-4 pt-8 space-y-6 max-w-md mx-auto">
+    <div className="flex flex-col bg-secondary/20 px-4 pt-6 pb-6 space-y-4 max-w-md mx-auto">
       <div className="flex justify-between items-center">
         <div>
           <h1 className="text-3xl font-bold text-foreground">{t('meds.title')}</h1>
@@ -411,6 +444,9 @@ export default function Medications() {
                         <div className={`w-4 h-4 bg-white rounded-full shadow-sm transition-transform ${med.is_active ? 'translate-x-4' : 'translate-x-0'}`} />
                       </button>
                     </div>
+                    <Button variant="ghost" size="icon" onClick={() => handleEditOpen(med)} className="text-primary hover:bg-primary/10">
+                      <Pencil className="w-5 h-5" />
+                    </Button>
                     <Button variant="ghost" size="icon" onClick={() => handleDeleteMed(med.id)} className="text-destructive hover:bg-destructive/10">
                       <Trash2 className="w-5 h-5" />
                     </Button>
@@ -435,6 +471,86 @@ export default function Medications() {
           ))
         )}
       </div>
+
+      {/* Edit Med Dialog */}
+      <Dialog open={isEditOpen} onOpenChange={(open) => {
+        setIsEditOpen(open);
+        if (!open) {
+          setEditingMed(null);
+          setMedName(''); setDosageAmt(''); setDosageUnit('mg'); setScheduleTimes(['09:00']);
+        }
+      }}>
+        <DialogContent className="w-11/12 rounded-2xl">
+          <DialogHeader>
+            <DialogTitle className="text-2xl">{t('meds.edit_title') || '약 정보 수정'}</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-6 pt-4">
+            <form onSubmit={handleEditSubmit} className="space-y-4">
+              <div className="space-y-2 relative">
+                <Label htmlFor="editMedName">{t('meds.med_name')}</Label>
+                <div className="relative">
+                  <Input 
+                    id="editMedName"
+                    required 
+                    value={medName} 
+                    onChange={e => handleMedNameChange(e.target.value)}
+                    className="h-14 text-lg pr-10" 
+                    placeholder="약 이름을 입력하세요"
+                    autoComplete="off"
+                  />
+                </div>
+              </div>
+              <div className="space-y-3">
+                <Label>{t('meds.dosage_amt')} / {t('meds.dosage_unit')}</Label>
+                <div className="flex gap-2">
+                  <Input 
+                    required 
+                    type="text" 
+                    value={dosageAmt} 
+                    onChange={e => setDosageAmt(e.target.value)} 
+                    className="h-12 flex-[2] text-lg" 
+                  />
+                  <Input 
+                    required 
+                    value={dosageUnit} 
+                    onChange={e => setDosageUnit(e.target.value)} 
+                    className="h-12 flex-1 text-lg" 
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-3">
+                <div className="flex justify-between items-center">
+                  <Label>복용 시간 (하루 {scheduleTimes.length}회)</Label>
+                  <Button type="button" variant="ghost" size="sm" onClick={addScheduleTime} className="h-8 text-primary">
+                    <Plus className="w-4 h-4 mr-1" /> 추가
+                  </Button>
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  {scheduleTimes.map((time, idx) => (
+                    <div key={idx} className="flex items-center gap-1">
+                      <Input 
+                        type="time" 
+                        value={time} 
+                        onChange={(e) => updateScheduleTime(idx, e.target.value)}
+                        className="h-10 text-sm"
+                      />
+                      {scheduleTimes.length > 1 && (
+                        <Button type="button" variant="ghost" size="icon" onClick={() => removeScheduleTime(idx)} className="h-10 w-10 text-destructive">
+                          <Trash2 className="w-4 h-4" />
+                        </Button>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+              <Button type="submit" className="w-full h-16 text-xl rounded-xl mt-4">
+                {t('common.save')}
+              </Button>
+            </form>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {/* Drug Detail Dialog */}
       <Dialog open={!!drugDetail || drugDetailLoading} onOpenChange={(open) => !open && setDrugDetail(null)}>
