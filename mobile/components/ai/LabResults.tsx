@@ -8,7 +8,7 @@ import {
   StyleSheet,
   ActivityIndicator,
   Alert,
-  KeyboardAvoidingView,
+  Keyboard,
   Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -76,7 +76,24 @@ export function LabResults() {
   const [chatInput, setChatInput] = useState('');
   const [chatting, setChatting] = useState(false);
 
+  const [kbHeight, setKbHeight] = useState(0);
   const [uploadOpen, setUploadOpen] = useState(false);
+
+  // Measure the keyboard so the chat can sit exactly above it
+  useEffect(() => {
+    if (!chatLab) {
+      setKbHeight(0);
+      return;
+    }
+    const showEvt = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
+    const hideEvt = Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide';
+    const s = Keyboard.addListener(showEvt, (e) => setKbHeight(e.endCoordinates?.height ?? 0));
+    const h = Keyboard.addListener(hideEvt, () => setKbHeight(0));
+    return () => {
+      s.remove();
+      h.remove();
+    };
+  }, [chatLab]);
   const [ocrLoading, setOcrLoading] = useState(false);
   const [scanned, setScanned] = useState<any>(null);
   const [labDate, setLabDate] = useState('');
@@ -288,14 +305,13 @@ export function LabResults() {
         )}
       </ScrollView>
 
-      {/* Lab chat — in-app overlay so KeyboardAvoidingView measures correctly */}
+      {/* Lab chat — in-app overlay; lift by the measured keyboard height */}
       {!!chatLab && (
-        <View style={[StyleSheet.absoluteFillObject, { zIndex: 50 }]} className="bg-background">
-          <KeyboardAvoidingView
-            behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-            className="flex-1"
-          >
-            <SafeAreaView className="flex-1 bg-background">
+        <View
+          style={[StyleSheet.absoluteFillObject, { zIndex: 50, paddingBottom: kbHeight }]}
+          className="bg-background"
+        >
+          <SafeAreaView className="flex-1 bg-background" edges={['top', 'bottom']}>
             <View className="flex-row items-center justify-between border-b border-border px-4 py-3">
               <View className="flex-row items-center gap-2">
                 <Ionicons name="chatbubble-ellipses" size={20} color="#16a34a" />
@@ -350,7 +366,6 @@ export function LabResults() {
               </Pressable>
             </View>
           </SafeAreaView>
-          </KeyboardAvoidingView>
         </View>
       )}
 
