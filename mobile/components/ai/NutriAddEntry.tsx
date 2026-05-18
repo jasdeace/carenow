@@ -62,11 +62,19 @@ export function NutriAddEntry({ open, onClose, onAdded, dateStr }: Props) {
       Alert.alert('토큰 부족', '토큰을 충전해주세요.');
       return;
     }
+    console.log('[meal] opening picker…');
     const b64 = await pickImage(source, { quality: 0.55 });
-    if (!b64) return;
+    if (!b64) {
+      console.log('[meal] no image (cancelled/denied)');
+      return;
+    }
+    console.log('[meal] image picked ~', Math.round(b64.length / 1024), 'KB');
     setLoading(true);
+    const t0 = Date.now();
     try {
+      console.log('[meal] calling analyze-meal edge function…');
       const result = await api.analyzeMealPhoto(b64);
+      console.log('[meal] analyze-meal returned in', Date.now() - t0, 'ms', JSON.stringify(result)?.slice(0, 200));
       if (result?.analysis) {
         const a = result.analysis;
         setAiResult(a);
@@ -81,6 +89,7 @@ export function NutriAddEntry({ open, onClose, onAdded, dateStr }: Props) {
         await fetchProfile(user.id);
       }
     } catch (e: any) {
+      console.log('[meal] analyze-meal FAILED after', Date.now() - t0, 'ms:', e?.message, JSON.stringify(e)?.slice(0, 300));
       Alert.alert('분석 실패', e?.message || '다시 시도해주세요');
     } finally {
       setLoading(false);
