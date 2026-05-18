@@ -40,6 +40,7 @@ export default function TakerHome() {
   const [dia, setDia] = useState('')
   const [pulse, setPulse] = useState('')
   const [isSubmittingBP, setIsSubmittingBP] = useState(false)
+  const [isSendingSOS, setIsSendingSOS] = useState(false)
   const showBP = localStorage.getItem('vitals_show_bp') !== 'false'
 
   const dateLocale = i18n.language === 'ko' ? ko : enUS
@@ -215,8 +216,18 @@ export default function TakerHome() {
     }
   }
 
-  const handleSOS = () => {
-    // Open native phone dialer for emergency
+  const handleSOS = async () => {
+    // Alert everyone watching my health data, then open the emergency dialer
+    if (user?.id) {
+      setIsSendingSOS(true)
+      try {
+        await api.sendSosAlert(user.id)
+      } catch (e) {
+        console.error('SOS alert failed:', e)
+      } finally {
+        setIsSendingSOS(false)
+      }
+    }
     window.location.href = 'tel:119'
   }
 
@@ -502,8 +513,8 @@ export default function TakerHome() {
             </DialogDescription>
           </DialogHeader>
           <DialogFooter className="flex-col sm:flex-col gap-3 pt-4">
-            <Button variant="destructive" className="w-full h-16 text-xl" onClick={handleSOS}>
-              {t('home.sos_trigger')}
+            <Button variant="destructive" className="w-full h-16 text-xl" onClick={handleSOS} disabled={isSendingSOS}>
+              {isSendingSOS ? <Loader2 className="w-6 h-6 animate-spin" /> : t('home.sos_trigger')}
             </Button>
             <DialogTrigger asChild>
               <Button variant="outline" className="w-full h-16 text-xl">

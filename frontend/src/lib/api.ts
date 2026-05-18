@@ -558,6 +558,15 @@ export const api = {
     if (error) throw error
   },
 
+  // Push an emergency alert to everyone watching this user's health data
+  sendSosAlert: async (userId: string) => {
+    const { data, error } = await supabase.functions.invoke('sos-alert', {
+      body: { senderUserId: userId }
+    })
+    if (error) throw error
+    return data as { success: boolean; sent: number; total: number }
+  },
+
   getLabResults: async (userId: string) => {
     const { data, error } = await supabase
       .from('lab_results')
