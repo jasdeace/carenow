@@ -21,16 +21,41 @@ interface AuthState {
   signOut: () => Promise<void>
 }
 
+// Cache the profile so warm app starts render instantly instead of
+// blocking the first paint on a network round-trip.
+const PROFILE_CACHE_KEY = 'carenow_profile_cache'
+
+function loadCachedProfile(): UserProfile | null {
+  try {
+    const raw = localStorage.getItem(PROFILE_CACHE_KEY)
+    return raw ? (JSON.parse(raw) as UserProfile) : null
+  } catch {
+    return null
+  }
+}
+
+function cacheProfile(profile: UserProfile | null) {
+  try {
+    if (profile) localStorage.setItem(PROFILE_CACHE_KEY, JSON.stringify(profile))
+    else localStorage.removeItem(PROFILE_CACHE_KEY)
+  } catch {
+    /* storage unavailable — non-fatal */
+  }
+}
+
 // Guard against concurrent fetchProfile calls
 let _fetchInProgress: Promise<void> | null = null
 
 export const useAuthStore = create<AuthState>((set) => ({
   user: null,
-  profile: null,
+  profile: loadCachedProfile(),
   isLoading: true,
 
   setUser: (user) => set({ user }),
-  setProfile: (profile) => set({ profile }),
+  setProfile: (profile) => {
+    cacheProfile(profile)
+    set({ profile })
+  },
 
   fetchProfile: async (userId) => {
     if (_fetchInProgress) {
@@ -39,7 +64,6 @@ export const useAuthStore = create<AuthState>((set) => ({
     }
 
     const doFetch = async () => {
-      set({ isLoading: true })
       const { data, error } = await supabase
         .from('users')
         .select('id, email, name_ko, phone_kr, tier, token_balance')
@@ -48,12 +72,11 @@ export const useAuthStore = create<AuthState>((set) => ({
 
       if (error) {
         console.error('Error fetching profile:', error)
-        set({ isLoading: false })
         return
       }
 
+      cacheProfile(data)
       set({ profile: data })
-      set({ isLoading: false })
     }
 
     _fetchInProgress = doFetch()
@@ -66,6 +89,7 @@ export const useAuthStore = create<AuthState>((set) => ({
 
   signOut: async () => {
     await supabase.auth.signOut()
+    cacheProfile(null)
     set({ user: null, profile: null })
   },
 }))

@@ -21,6 +21,12 @@ const config: CapacitorConfig = {
       // (and the chat panel) shrink to the visible area instead of being covered.
       resize: KeyboardResize.Native,
     },
+    SplashScreen: {
+      // Hold the native splash until React has mounted the first screen,
+      // then hide it manually — no white WebView-boot flash.
+      launchAutoHide: false,
+      backgroundColor: '#ffffff',
+    },
   },
 };
 
