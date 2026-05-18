@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { View, Text, Pressable, TextInput, ActivityIndicator, Alert } from 'react-native';
+import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 
 import { useAuthStore } from '@/stores/authStore';
@@ -8,6 +9,7 @@ import { formatPhone } from '@/lib/phoneUtils';
 
 export function GiverHome() {
   const { user } = useAuthStore();
+  const router = useRouter();
   const [takers, setTakers] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [code, setCode] = useState('');
@@ -90,8 +92,12 @@ export function GiverHome() {
       ) : (
         <View className="gap-3">
           {takers.map((taker) => (
-            <View
+            <Pressable
               key={taker.id}
+              onPress={() =>
+                taker.accepted_at &&
+                router.push({ pathname: '/giver/[takerId]', params: { takerId: taker.id } })
+              }
               className="flex-row items-center justify-between rounded-2xl bg-background p-4 shadow-sm"
             >
               <View className="flex-row items-center gap-3">
@@ -120,7 +126,7 @@ export function GiverHome() {
                   <Ionicons name="trash-outline" size={18} color="#ef4444" />
                 )}
               </Pressable>
-            </View>
+            </Pressable>
           ))}
         </View>
       )}
