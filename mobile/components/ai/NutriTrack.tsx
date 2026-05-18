@@ -9,12 +9,17 @@ import { NutriChat } from './NutriChat';
 import { NutriAddEntry } from './NutriAddEntry';
 
 const KO_DAYS = ['일', '월', '화', '수', '목', '금', '토'];
-const TARGET = 2000;
+const DEFAULT_TARGET = 2000;
+const GOAL_LABEL: Record<string, string> = {
+  lose: '체중 감량',
+  gain: '근육 증가',
+  maintain: '체중 유지',
+};
 
-function CalorieRing({ caloriesIn }: { caloriesIn: number }) {
+function CalorieRing({ caloriesIn, target }: { caloriesIn: number; target: number }) {
   const r = 50;
   const c = 2 * Math.PI * r;
-  const pct = Math.min(100, (caloriesIn / TARGET) * 100);
+  const pct = Math.min(100, (caloriesIn / target) * 100);
   const offset = c - (pct / 100) * c;
   return (
     <View className="h-32 w-32 items-center justify-center">
@@ -33,7 +38,7 @@ function CalorieRing({ caloriesIn }: { caloriesIn: number }) {
         />
       </Svg>
       <Text className="text-2xl font-bold text-foreground">{caloriesIn}</Text>
-      <Text className="text-[10px] text-muted-foreground">/ {TARGET} kcal</Text>
+      <Text className="text-[10px] text-muted-foreground">/ {target} kcal</Text>
     </View>
   );
 }
@@ -47,22 +52,39 @@ export function NutriTrack() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editCal, setEditCal] = useState('');
   const [selectedDate, setSelectedDate] = useState(new Date());
+  const [goal, setGoal] = useState<{
+    goal_type: string | null;
+    daily_calorie_goal: number;
+  } | null>(null);
 
   const dateStr = selectedDate.toLocaleDateString('en-CA', { timeZone: 'Asia/Seoul' });
   const todayStr = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Seoul' });
   const isToday = dateStr === todayStr;
+  const target = goal?.daily_calorie_goal || DEFAULT_TARGET;
 
   useEffect(() => {
     loadEntries();
   }, [user?.id, dateStr]);
   useEffect(() => {
-    if (user?.id) api.getWeeklyNutrition(user.id).then(setWeekly).catch(console.error);
+    if (user?.id) {
+      api.getWeeklyNutrition(user.id).then(setWeekly).catch(console.error);
+      loadGoal();
+    }
   }, [user?.id]);
 
   const loadEntries = async () => {
     if (!user?.id) return;
     try {
       setEntries(await api.getNutritionEntries(user.id, dateStr));
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
+  const loadGoal = async () => {
+    if (!user?.id) return;
+    try {
+      setGoal((await api.getNutritionGoal(user.id)) as any);
     } catch (e) {
       console.error(e);
     }
@@ -143,7 +165,7 @@ export function NutriTrack() {
 
         {/* Summary */}
         <View className="flex-row items-center gap-5 rounded-2xl bg-emerald-50 p-5">
-          <CalorieRing caloriesIn={caloriesIn} />
+          <CalorieRing caloriesIn={caloriesIn} target={target} />
           <View className="flex-1 gap-2">
             <View className="flex-row justify-between">
               <Text className="text-xs text-muted-foreground">섭취</Text>
@@ -159,6 +181,12 @@ export function NutriTrack() {
             </View>
             <Text className="text-[11px] text-muted-foreground">
               단백질 {protein.toFixed(0)}g · 탄수 {carbs.toFixed(0)}g · 지방 {fat.toFixed(0)}g
+            </Text>
+            <Text className="text-[11px] font-medium text-emerald-700">
+              🎯 목표 {target} kcal
+              {goal?.goal_type && GOAL_LABEL[goal.goal_type]
+                ? ` · ${GOAL_LABEL[goal.goal_type]}`
+                : ''}
             </Text>
           </View>
         </View>
@@ -178,7 +206,7 @@ export function NutriTrack() {
           <View className="rounded-2xl bg-background p-4 shadow-sm">
             <View className="h-28 flex-row items-end justify-between gap-1">
               {weekly.map((d, i) => {
-                const maxCal = Math.max(...weekly.map((w) => w.caloriesIn || 1), TARGET);
+                const maxCal = Math.max(...weekly.map((w) => w.caloriesIn || 1), target);
                 const h = Math.max(4, (d.caloriesIn / maxCal) * 100);
                 const today = d.date === todayStr;
                 return (
@@ -278,7 +306,10 @@ export function NutriTrack() {
           <NutriChat
             todayEntries={entries}
             dailySummary={{ caloriesIn, burned, protein, carbs, fat }}
-            onEntriesChanged={loadEntries}
+            onEntriesChanged={() => {
+              loadEntries();
+              loadGoal();
+            }}
           />
         )}
       </ScrollView>

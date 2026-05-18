@@ -793,5 +793,17 @@ export const api = {
       }, { onConflict: 'user_id,chat_date' })
     if (error) throw error
   },
+
+  getNutritionGoal: async (userId: string) => {
+    const { data, error } = await supabase
+      .from('nutrition_goals')
+      .select('*')
+      .eq('user_id', userId)
+      .maybeSingle()
+    if (error) throw error
+    return data as
+      | { goal_type: string | null; daily_calorie_goal: number; daily_protein_goal: number | null; notes: string | null }
+      | null
+  },
 }
 

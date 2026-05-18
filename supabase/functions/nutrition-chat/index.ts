@@ -18,7 +18,7 @@ serve(async (req: Request) => {
 
   try {
     const { userId, message, todayEntries, dailySummary, chatHistory } = await req.json()
-    
+
     if (!userId || !message) {
       throw new Error("Missing userId or message")
     }
@@ -30,113 +30,136 @@ serve(async (req: Request) => {
     const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
     const supabase = createClient(supabaseUrl, supabaseServiceKey)
 
+    // Current nutrition goal (if any)
+    const { data: goalRow } = await supabase
+      .from('nutrition_goals')
+      .select('*')
+      .eq('user_id', userId)
+      .maybeSingle()
+
     const contextStr = JSON.stringify({
       today_entries: todayEntries || [],
       daily_summary: dailySummary || {},
+      nutrition_goal: goalRow || { daily_calorie_goal: null, goal_type: null, notes: null },
     }, null, 2)
 
-    const systemInstruction = `You are a professional nutritionist AI for the CareNow app.
-Your goal is to help users track their nutrition and activity through conversation.
+    const systemInstruction = `You are a professional nutrition and fitness coach AI for the CareNow app.
+You help users with diet AND exercise: tracking what they eat and do, setting realistic
+daily calorie/protein goals, and giving personalised coaching advice.
 
 CURRENT CONTEXT:
 ${contextStr}
 
-ACTIONS:
-You can trigger data changes by including an "actions" array in your JSON response.
-Supported actions:
+YOUR JOB:
+1. GOAL SETTING — When the user describes a goal (e.g. lose weight, gain muscle,
+   maintain, "5kg 빼고 싶어", "근육 키우고 싶어"), ask brief clarifying questions if
+   needed, then propose a sensible daily calorie goal (and protein goal) and emit a
+   "set_goal" action. Base it on their stated goal — a moderate deficit for weight loss,
+   a surplus for muscle gain, maintenance otherwise.
+2. COACHING — When asked for advice, compare today's intake and exercise (from
+   daily_summary / today_entries) against their nutrition_goal and give concrete,
+   encouraging guidance: how many calories they have left, whether protein is on track,
+   what to eat next, whether to add exercise.
+3. LOGGING — When the user mentions food or exercise, log it via add_meal / add_activity.
+
+ACTIONS — include an "actions" array in your JSON response:
+- { "type": "set_goal", "goal_type": "lose|maintain|gain", "daily_calorie_goal": number, "daily_protein_goal": number, "notes": "the user's goal in their words" }
 - { "type": "add_meal", "meal_type": "breakfast|lunch|dinner|snack", "description": "name", "calories": number, "protein_g": number, "carbs_g": number, "fat_g": number }
-- { "type": "add_activity", "activity_name": "name", "duration_minutes": number, "calories": number (positive value) }
+- { "type": "add_activity", "activity_name": "name", "duration_minutes": number, "calories": number (positive) }
 - { "type": "delete_entry", "id": "entry_uuid" }
 
-RESPONSE FORMAT:
-You MUST return a JSON object with this exact structure:
+RESPONSE FORMAT — return ONLY this JSON, no markdown:
 {
-  "reply": "Your friendly message to the user in Korean",
-  "actions": [ ... list of actions or empty array ... ]
+  "reply": "Your friendly coaching message in Korean",
+  "actions": [ ... or empty array ... ]
 }
 
 RULES:
-- Be encouraging and professional.
-- If the user mentions eating something, estimate the calories/macros if not provided.
-- If the user mentions exercise, estimate calories burned.
-- If the user asks to "delete" or "remove" something, find the ID from today_entries in the context.
-- Use metric units (g, kcal).
-- Keep the reply concise and friendly.
-- If the user's message doesn't require any data changes, return empty actions array.
-- ALWAYS return valid JSON. No markdown, no explanation outside the JSON.`
+- Be encouraging, concrete, and professional. Reply in Korean.
+- Estimate calories/macros for foods and calories burned for exercise when not given.
+- Only emit set_goal when the user is actually setting/changing a goal.
+- When coaching, reference real numbers from the context (remaining calories, protein, etc.).
+- If the message needs no data change, return an empty actions array.
+- ALWAYS return valid JSON.`
 
-    // Use same model pattern as ask-ai (which works)
     const geminiEndpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite-preview:generateContent?key=${GEMINI_API_KEY}`
 
-    // Build conversation contents — same pattern as working ask-ai function
     const contents: any[] = []
     if (chatHistory && Array.isArray(chatHistory)) {
       for (const msg of chatHistory) {
-        // Skip duplicate of current message
         if (msg.role === 'user' && msg.text === message) continue;
-        // Skip intro messages
         if (msg.role === 'ai' && msg.text.includes('무엇이든')) continue;
         if (msg.role === 'ai' && msg.text.includes('안녕하세요')) continue;
         contents.push({
           role: msg.role === 'ai' ? 'model' : 'user',
-          parts: [{ text: msg.text }]
+          parts: [{ text: msg.text }],
         })
       }
     }
-    contents.push({
-      role: 'user',
-      parts: [{ text: message }]
-    })
+    contents.push({ role: 'user', parts: [{ text: message }] })
 
     const response = await fetch(geminiEndpoint, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         systemInstruction: { parts: [{ text: systemInstruction }] },
-        contents: contents
-      })
+        contents: contents,
+      }),
     })
 
     const geminiData = await response.json()
-
     if (!response.ok) {
       console.error("Gemini API error:", JSON.stringify(geminiData))
       throw new Error(geminiData.error?.message || "Failed to contact Gemini API")
     }
 
     let text = geminiData.candidates?.[0]?.content?.parts?.[0]?.text || "{}"
-    // Clean markdown wrappers
     text = text.replace(/```json/gi, '').replace(/```/g, '').trim()
 
     let result: any = { reply: "죄송합니다, 처리 중 문제가 발생했습니다.", actions: [] }
     try {
       result = JSON.parse(text)
     } catch (e) {
-      // If Gemini returned plain text instead of JSON, use it as the reply
       result = { reply: text, actions: [] }
     }
 
-    // Execute actions if any
+    const today = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Seoul' })
     const executedActions: any[] = []
+
     for (const action of (result.actions || [])) {
       try {
-        if (action.type === 'add_meal') {
+        if (action.type === 'set_goal') {
+          const { data, error } = await supabase
+            .from('nutrition_goals')
+            .upsert({
+              user_id: userId,
+              goal_type: action.goal_type ?? goalRow?.goal_type ?? null,
+              daily_calorie_goal:
+                action.daily_calorie_goal ?? goalRow?.daily_calorie_goal ?? 2000,
+              daily_protein_goal: action.daily_protein_goal ?? goalRow?.daily_protein_goal ?? null,
+              notes: action.notes ?? goalRow?.notes ?? null,
+              updated_at: new Date().toISOString(),
+            })
+            .select()
+            .single()
+          if (!error) executedActions.push({ type: 'set_goal', success: true, goal: data })
+          else console.error('Failed to set goal:', error)
+        } else if (action.type === 'add_meal') {
           const { data, error } = await supabase
             .from('nutrition_entries')
             .insert({
               user_id: userId,
-              entry_date: new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Seoul' }),
+              entry_date: today,
               entry_type: 'meal',
               meal_type: action.meal_type,
               description: action.description,
               calories: action.calories,
               protein_g: action.protein_g,
               carbs_g: action.carbs_g,
-              fat_g: action.fat_g
+              fat_g: action.fat_g,
             })
             .select()
             .single()
-
           if (!error) executedActions.push({ type: 'add_meal', success: true, entry: data })
           else console.error('Failed to add meal:', error)
         } else if (action.type === 'add_activity') {
@@ -144,15 +167,14 @@ RULES:
             .from('nutrition_entries')
             .insert({
               user_id: userId,
-              entry_date: new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Seoul' }),
+              entry_date: today,
               entry_type: 'activity',
               activity_name: action.activity_name,
               duration_minutes: action.duration_minutes,
-              calories: -Math.abs(action.calories || 0)
+              calories: -Math.abs(action.calories || 0),
             })
             .select()
             .single()
-
           if (!error) executedActions.push({ type: 'add_activity', success: true, entry: data })
           else console.error('Failed to add activity:', error)
         } else if (action.type === 'delete_entry' && action.id) {
@@ -160,7 +182,6 @@ RULES:
             .from('nutrition_entries')
             .delete()
             .eq('id', action.id)
-
           if (!error) executedActions.push({ type: 'delete_entry', success: true, id: action.id })
         }
       } catch (actionError) {
@@ -171,17 +192,17 @@ RULES:
     return new Response(JSON.stringify({
       reply: result.reply,
       actions: executedActions,
-    }), { 
+    }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      status: 200 
+      status: 200,
     })
 
-  } catch(error) {
+  } catch (error) {
     const err = error as Error;
     console.error("nutrition-chat error:", err.message)
-    return new Response(JSON.stringify({ error: err.message }), { 
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' }, 
-      status: 400 
+    return new Response(JSON.stringify({ error: err.message }), {
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      status: 400,
     })
   }
 })
