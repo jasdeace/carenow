@@ -8,7 +8,7 @@ import {
   Platform,
   ActivityIndicator,
 } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useRouter, Link } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 
 import { supabase } from '@/lib/supabase';
@@ -93,6 +93,13 @@ export default function Login() {
               </Text>
             )}
           </Pressable>
+
+          <View className="mt-4 flex-row justify-center gap-1">
+            <Text className="text-sm text-muted-foreground">{t('auth.no_account')}</Text>
+            <Link href="/signup" className="text-sm font-medium text-primary underline">
+              {t('auth.signup_link')}
+            </Link>
+          </View>
         </View>
       </View>
     </KeyboardAvoidingView>
