@@ -4,7 +4,7 @@ import { api } from '../lib/api'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Plus, Trash2, Utensils, Dumbbell, Flame, TrendingUp, ChevronRight, ChevronLeft, Edit2 } from 'lucide-react'
-import NutriAddEntry from '../components/nutrition/NutriAddEntry'
+import NutriAddEntry, { readPendingMeal } from '../components/nutrition/NutriAddEntry'
 import NutriChat from '../components/nutrition/NutriChat'
 
 export default function NutriTrack() {
@@ -41,6 +41,11 @@ export default function NutriTrack() {
 
   useEffect(() => { loadEntries() }, [user?.id, dateStr])
   useEffect(() => { loadWeekly() }, [user?.id])
+
+  // Reopen the add sheet if a paid AI analysis was left unsaved by an app reload
+  useEffect(() => {
+    if (readPendingMeal(todayStr)) setShowAdd(true)
+  }, [todayStr])
 
   const handleDelete = async (id: string) => {
     if (!confirm('삭제하시겠습니까?')) return

@@ -15,6 +15,23 @@ interface Props {
   todayStr: string
 }
 
+// An AI meal analysis costs a token, but iOS can purge the WebView under
+// memory pressure right after a photo capture. We stash the result so a
+// reload can't lose a paid analysis.
+export const PENDING_MEAL_KEY = 'carenow_pending_meal'
+
+export function readPendingMeal(todayStr: string): any | null {
+  try {
+    const raw = localStorage.getItem(PENDING_MEAL_KEY)
+    if (!raw) return null
+    const p = JSON.parse(raw)
+    if (p.todayStr !== todayStr) { localStorage.removeItem(PENDING_MEAL_KEY); return null }
+    return p
+  } catch {
+    return null
+  }
+}
+
 const ACTIVITIES = [
   { name: '걷기', icon: '🚶' },
   { name: '달리기', icon: '🏃' },
@@ -28,16 +45,18 @@ const ACTIVITIES = [
 
 export default function NutriAddEntry({ open, onClose, onAdded, todayStr }: Props) {
   const { user, profile, fetchProfile } = useAuthStore()
-  const [tab, setTab] = useState<'photo'|'manual'|'activity'>('photo')
+  // Restore an unsaved AI meal analysis if iOS reloaded the app mid-flow
+  const [restored] = useState(() => readPendingMeal(todayStr))
+  const [tab, setTab] = useState<'photo'|'manual'|'activity'>(restored ? 'manual' : 'photo')
   const [loading, setLoading] = useState(false)
 
   // Manual meal state
-  const [mealDesc, setMealDesc] = useState('')
-  const [mealType, setMealType] = useState('lunch')
-  const [calories, setCalories] = useState('')
-  const [protein, setProtein] = useState('')
-  const [carbs, setCarbs] = useState('')
-  const [fat, setFat] = useState('')
+  const [mealDesc, setMealDesc] = useState(restored?.mealDesc ?? '')
+  const [mealType, setMealType] = useState(restored?.mealType ?? 'lunch')
+  const [calories, setCalories] = useState(restored?.calories ?? '')
+  const [protein, setProtein] = useState(restored?.protein ?? '')
+  const [carbs, setCarbs] = useState(restored?.carbs ?? '')
+  const [fat, setFat] = useState(restored?.fat ?? '')
 
   // Activity state
   const [actName, setActName] = useState('')
@@ -45,12 +64,13 @@ export default function NutriAddEntry({ open, onClose, onAdded, todayStr }: Prop
   const [actCalories, setActCalories] = useState('')
 
   // AI result preview
-  const [aiResult, setAiResult] = useState<any>(null)
+  const [aiResult, setAiResult] = useState<any>(restored?.analysis ?? null)
 
   const resetForm = () => {
     setMealDesc(''); setCalories(''); setProtein(''); setCarbs(''); setFat('')
     setActName(''); setActDuration(''); setActCalories('')
     setAiResult(null); setTab('photo')
+    try { localStorage.removeItem(PENDING_MEAL_KEY) } catch {}
   }
 
   const handleNativePhoto = async (source: CameraSource) => {
@@ -64,25 +84,41 @@ export default function NutriAddEntry({ open, onClose, onAdded, todayStr }: Prop
       const photo = await CapacitorCamera.getPhoto({
         resultType: CameraResultType.Base64,
         source: source,
-        quality: 80,
-        width: 1200 // Let native capacitor handle the resizing
+        // Keep the image small: a large base64 string spikes memory and can
+        // make iOS purge/reload the WebView. 900px is plenty for AI analysis.
+        quality: 55,
+        width: 900,
+        correctOrientation: true,
       })
 
       if (!photo.base64String) return
 
       setLoading(true)
       const b64 = `data:image/${photo.format || 'jpeg'};base64,${photo.base64String}`
-      
+
       const result = await api.analyzeMealPhoto(b64)
       if (result?.analysis) {
-        setAiResult(result.analysis)
-        setMealDesc(result.analysis.description || '')
-        setMealType(result.analysis.meal_type || 'lunch')
-        setCalories(String(result.analysis.calories || 0))
-        setProtein(String(result.analysis.protein_g || 0))
-        setCarbs(String(result.analysis.carbs_g || 0))
-        setFat(String(result.analysis.fat_g || 0))
+        const a = result.analysis
+        const filled = {
+          mealDesc: a.description || '',
+          mealType: a.meal_type || 'lunch',
+          calories: String(a.calories || 0),
+          protein: String(a.protein_g || 0),
+          carbs: String(a.carbs_g || 0),
+          fat: String(a.fat_g || 0),
+        }
+        setAiResult(a)
+        setMealDesc(filled.mealDesc)
+        setMealType(filled.mealType)
+        setCalories(filled.calories)
+        setProtein(filled.protein)
+        setCarbs(filled.carbs)
+        setFat(filled.fat)
         setTab('manual')
+        // Persist before deducting the token so a WebView reload can't lose it
+        try {
+          localStorage.setItem(PENDING_MEAL_KEY, JSON.stringify({ todayStr, analysis: a, ...filled }))
+        } catch {}
         await api.deductToken(user.id, 1, 'meal_analysis')
         await fetchProfile(user.id)
       }
