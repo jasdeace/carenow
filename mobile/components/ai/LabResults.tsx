@@ -5,6 +5,7 @@ import {
   Pressable,
   ScrollView,
   TextInput,
+  Modal,
   StyleSheet,
   ActivityIndicator,
   Alert,
@@ -305,12 +306,9 @@ export function LabResults() {
         )}
       </ScrollView>
 
-      {/* Lab chat — in-app overlay; lift by the measured keyboard height */}
-      {!!chatLab && (
-        <View
-          style={[StyleSheet.absoluteFillObject, { zIndex: 50, paddingBottom: kbHeight }]}
-          className="bg-background"
-        >
+      {/* Lab chat — full-screen modal, lifted by the measured keyboard height */}
+      <Modal visible={!!chatLab} animationType="slide" onRequestClose={() => setChatLab(null)}>
+        <View className="flex-1 bg-background" style={{ paddingBottom: kbHeight }}>
           <SafeAreaView className="flex-1 bg-background" edges={['top', 'bottom']}>
             <View className="flex-row items-center justify-between border-b border-border px-4 py-3">
               <View className="flex-row items-center gap-2">
@@ -367,7 +365,7 @@ export function LabResults() {
             </View>
           </SafeAreaView>
         </View>
-      )}
+      </Modal>
 
       {/* Upload / scan — in-app overlay (not RN Modal: camera conflicts with it) */}
       {uploadOpen && (
