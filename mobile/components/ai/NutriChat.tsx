@@ -5,9 +5,13 @@ import {
   Pressable,
   TextInput,
   ScrollView,
+  Modal,
+  Keyboard,
+  Platform,
   ActivityIndicator,
   Alert,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 
 import { useAuthStore } from '@/stores/authStore';
@@ -32,6 +36,7 @@ export function NutriChat({ todayEntries, dailySummary, onEntriesChanged }: Prop
   const [input, setInput] = useState('');
   const [messages, setMessages] = useState<Msg[]>([GREETING]);
   const [loading, setLoading] = useState(false);
+  const [kbHeight, setKbHeight] = useState(0);
   const scrollRef = useRef<ScrollView>(null);
   const todayStr = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Seoul' });
 
@@ -44,6 +49,22 @@ export function NutriChat({ todayEntries, dailySummary, onEntriesChanged }: Prop
       })
       .catch(() => {});
   }, [user?.id]);
+
+  // Measure the keyboard so the chat sits exactly above it
+  useEffect(() => {
+    if (!expanded) {
+      setKbHeight(0);
+      return;
+    }
+    const showEvt = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
+    const hideEvt = Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide';
+    const s = Keyboard.addListener(showEvt, (e) => setKbHeight(e.endCoordinates?.height ?? 0));
+    const h = Keyboard.addListener(hideEvt, () => setKbHeight(0));
+    return () => {
+      s.remove();
+      h.remove();
+    };
+  }, [expanded]);
 
   const send = async () => {
     if (!input.trim() || !user?.id || loading) return;
@@ -70,8 +91,9 @@ export function NutriChat({ todayEntries, dailySummary, onEntriesChanged }: Prop
     }
   };
 
-  if (!expanded) {
-    return (
+  return (
+    <>
+      {/* Collapsed banner */}
       <Pressable
         onPress={() => setExpanded(true)}
         className="rounded-2xl border border-violet-200 bg-violet-50 p-4"
@@ -80,7 +102,9 @@ export function NutriChat({ todayEntries, dailySummary, onEntriesChanged }: Prop
           <View className="flex-row items-center gap-2">
             <Ionicons name="sparkles" size={18} color="#8b5cf6" />
             <Text className="text-sm font-semibold text-foreground">AI 영양사</Text>
-            <Text className="text-xs text-muted-foreground">· 토큰 {profile?.token_balance ?? 0}개</Text>
+            <Text className="text-xs text-muted-foreground">
+              · 토큰 {profile?.token_balance ?? 0}개
+            </Text>
           </View>
           <Ionicons name="chevron-up" size={18} color="#a1a1aa" />
         </View>
@@ -88,63 +112,75 @@ export function NutriChat({ todayEntries, dailySummary, onEntriesChanged }: Prop
           {messages[messages.length - 1]?.text}
         </Text>
       </Pressable>
-    );
-  }
 
-  return (
-    <View className="h-96 overflow-hidden rounded-2xl border border-border bg-background">
-      <Pressable
-        onPress={() => setExpanded(false)}
-        className="flex-row items-center justify-between border-b border-border bg-violet-50 p-3"
-      >
-        <View className="flex-row items-center gap-2">
-          <Ionicons name="sparkles" size={18} color="#8b5cf6" />
-          <Text className="text-sm font-semibold text-foreground">AI 영양사</Text>
-          <Text className="text-xs text-muted-foreground">토큰 {profile?.token_balance ?? 0}개</Text>
-        </View>
-        <Ionicons name="chevron-down" size={18} color="#a1a1aa" />
-      </Pressable>
-
-      <ScrollView
-        ref={scrollRef}
-        className="flex-1 p-3"
-        contentContainerClassName="gap-3"
-        onContentSizeChange={() => scrollRef.current?.scrollToEnd({ animated: true })}
-      >
-        {messages.map((m, i) => (
-          <View key={i} className={`flex-row ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-            <View
-              className={`max-w-[85%] rounded-2xl px-3 py-2 ${
-                m.role === 'user' ? 'bg-primary' : 'bg-secondary'
-              }`}
-            >
-              <Text className={`text-sm ${m.role === 'user' ? 'text-primary-foreground' : 'text-foreground'}`}>
-                {m.text}
-              </Text>
+      {/* Full-screen chat, lifted by the measured keyboard height */}
+      <Modal visible={expanded} animationType="slide" onRequestClose={() => setExpanded(false)}>
+        <View className="flex-1 bg-background" style={{ paddingBottom: kbHeight }}>
+          <SafeAreaView className="flex-1 bg-background" edges={['top', 'bottom']}>
+            <View className="flex-row items-center justify-between border-b border-border bg-violet-50 p-3">
+              <View className="flex-row items-center gap-2">
+                <Ionicons name="sparkles" size={20} color="#8b5cf6" />
+                <Text className="text-lg font-bold text-foreground">AI 영양사</Text>
+                <Text className="text-xs text-muted-foreground">
+                  토큰 {profile?.token_balance ?? 0}개
+                </Text>
+              </View>
+              <Pressable onPress={() => setExpanded(false)}>
+                <Ionicons name="close" size={26} color="#71717a" />
+              </Pressable>
             </View>
-          </View>
-        ))}
-        {loading && <ActivityIndicator size="small" color="#8b5cf6" />}
-      </ScrollView>
 
-      <View className="flex-row items-center gap-2 border-t border-border p-2">
-        <TextInput
-          value={input}
-          onChangeText={setInput}
-          placeholder="예: 점심에 비빔밥 먹었어"
-          placeholderTextColor="#a1a1aa"
-          className="h-11 flex-1 rounded-xl bg-secondary px-3 text-sm text-foreground"
-        />
-        <Pressable
-          onPress={send}
-          disabled={!input.trim() || loading}
-          className={`h-11 w-11 items-center justify-center rounded-full bg-primary ${
-            !input.trim() || loading ? 'opacity-50' : ''
-          }`}
-        >
-          <Ionicons name="send" size={16} color="#ffffff" />
-        </Pressable>
-      </View>
-    </View>
+            <ScrollView
+              ref={scrollRef}
+              className="flex-1"
+              contentContainerClassName="p-4 gap-3"
+              onContentSizeChange={() => scrollRef.current?.scrollToEnd({ animated: true })}
+            >
+              {messages.map((m, i) => (
+                <View
+                  key={i}
+                  className={`flex-row ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}
+                >
+                  <View
+                    className={`max-w-[85%] rounded-2xl px-3 py-2 ${
+                      m.role === 'user' ? 'bg-primary' : 'bg-secondary'
+                    }`}
+                  >
+                    <Text
+                      className={`text-sm ${
+                        m.role === 'user' ? 'text-primary-foreground' : 'text-foreground'
+                      }`}
+                    >
+                      {m.text}
+                    </Text>
+                  </View>
+                </View>
+              ))}
+              {loading && <ActivityIndicator size="small" color="#8b5cf6" />}
+            </ScrollView>
+
+            <View className="flex-row items-center gap-2 border-t border-border p-3">
+              <TextInput
+                value={input}
+                onChangeText={setInput}
+                placeholder="예: 점심에 비빔밥 먹었어"
+                placeholderTextColor="#a1a1aa"
+                multiline
+                className="max-h-24 min-h-[44px] flex-1 rounded-xl bg-secondary px-3 py-2 text-base text-foreground"
+              />
+              <Pressable
+                onPress={send}
+                disabled={!input.trim() || loading}
+                className={`h-11 w-11 items-center justify-center rounded-full bg-primary ${
+                  !input.trim() || loading ? 'opacity-50' : ''
+                }`}
+              >
+                <Ionicons name="send" size={18} color="#ffffff" />
+              </Pressable>
+            </View>
+          </SafeAreaView>
+        </View>
+      </Modal>
+    </>
   );
 }

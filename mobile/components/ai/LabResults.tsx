@@ -99,8 +99,8 @@ export function LabResults() {
   const [scanned, setScanned] = useState<any>(null);
   const [labDate, setLabDate] = useState('');
 
-  const scanLab = async () => {
-    const b64 = await pickImage('camera', { quality: 0.85 });
+  const scanLab = async (source: 'camera' | 'library') => {
+    const b64 = await pickImage(source, { quality: 0.85 });
     if (!b64) return;
     setOcrLoading(true);
     try {
@@ -384,13 +384,22 @@ export function LabResults() {
                 <Text className="text-primary">검사지를 분석하고 있습니다...</Text>
               </View>
             ) : !scanned ? (
-              <Pressable
-                onPress={scanLab}
-                className="h-32 items-center justify-center gap-2 rounded-2xl border border-primary/40 bg-primary/5"
-              >
-                <Ionicons name="camera" size={36} color="#16a34a" />
-                <Text className="text-base font-medium text-primary">검사지 촬영</Text>
-              </Pressable>
+              <View className="gap-3">
+                <Pressable
+                  onPress={() => scanLab('camera')}
+                  className="h-28 items-center justify-center gap-2 rounded-2xl border border-primary/40 bg-primary/5"
+                >
+                  <Ionicons name="camera" size={32} color="#16a34a" />
+                  <Text className="text-base font-medium text-primary">카메라로 촬영</Text>
+                </Pressable>
+                <Pressable
+                  onPress={() => scanLab('library')}
+                  className="h-28 items-center justify-center gap-2 rounded-2xl border border-violet-300 bg-violet-50"
+                >
+                  <Ionicons name="image" size={32} color="#8b5cf6" />
+                  <Text className="text-base font-medium text-violet-600">갤러리에서 선택</Text>
+                </Pressable>
+              </View>
             ) : (
               <>
                 <View>
