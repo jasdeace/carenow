@@ -11,8 +11,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Switch } from '@/components/ui/switch'
-import { Badge } from '@/components/ui/badge'
-import { User, LogOut, Globe, HeartPulse, Trash2, Loader2, ShieldCheck, FileText, ChevronRight, ChevronDown, ChevronUp, AlertTriangle, Sparkles, ArrowDownCircle, ArrowUpCircle } from 'lucide-react'
+import { User, LogOut, Globe, HeartPulse, Loader2, ShieldCheck, FileText, ChevronRight, ChevronDown, ChevronUp, AlertTriangle, Sparkles, ArrowDownCircle, ArrowUpCircle } from 'lucide-react'
 
 export default function Profile() {
   const { t, i18n } = useTranslation()
@@ -27,11 +26,6 @@ export default function Profile() {
   const [showGlucose, setShowGlucose] = useState(() => localStorage.getItem('vitals_show_glucose') !== 'false')
   const [showWeight, setShowWeight] = useState(() => localStorage.getItem('vitals_show_weight') !== 'false')
 
-  // Connections
-  const [takers, setTakers] = useState<any[]>([])
-  const [loadingTakers, setLoadingTakers] = useState(false)
-  const [actionId, setActionId] = useState<string | null>(null)
-
   // Token history
   const [showTokenHistory, setShowTokenHistory] = useState(false)
   const [tokenHistory, setTokenHistory] = useState<any[]>([])
@@ -42,62 +36,21 @@ export default function Profile() {
   }, [profile?.phone_kr])
 
   useEffect(() => {
-    if (user?.id) {
-      loadCircleInfo()
-      if (profile?.role === 'caregiver') {
-        loadTakers()
-      }
-    }
-  }, [user?.id, profile?.role])
+    if (user?.id) loadCircleInfo()
+  }, [user?.id])
 
   const loadCircleInfo = async () => {
     if (!user?.id) return
     try {
-      let cId = await api.getLovedOneCircleId(user.id)
+      const cId = await api.getLovedOneCircleId(user.id)
       if (!cId) {
-        // Auto-create circle if it doesn't exist for Taker role
-        if (profile?.role === 'loved_one') {
-          await api.createCareCircleForLovedOne(user.id, profile?.name_ko || 'User')
-        }
+        // Every user has their own care circle for meds, vitals and labs
+        await api.createCareCircleForLovedOne(user.id, profile?.name_ko || 'User')
       }
     } catch (e) {
       console.error('Failed to load circle info:', e)
     }
   }
-
-  const loadTakers = async () => {
-    if (!user?.id) return
-    setLoadingTakers(true)
-    try {
-      const data = await api.getGiverTakersList(user.id)
-      setTakers(data || [])
-    } catch (e) {
-      console.error(e)
-    } finally {
-      setLoadingTakers(false)
-    }
-  }
-
-
-
-  const handleDisconnectTaker = async (taker: any) => {
-    if (!user?.id) return
-    setActionId(taker.id)
-    try {
-      const cId = taker.circle_id || await api.getTakerCircleId(taker.id)
-      if (cId) {
-        await api.leaveCareCircle(user.id, cId)
-        setTakers(prev => prev.filter(t => t.id !== taker.id))
-      }
-    } catch (e) {
-      console.error(e)
-      alert(t('caregiver.disconnect_error'))
-    } finally {
-      setActionId(null)
-    }
-  }
-
-
 
   const handleSavePhone = async () => {
     if (!user?.id) return
@@ -129,16 +82,6 @@ export default function Profile() {
       alert('계정 삭제 중 오류가 발생했습니다.')
     } finally {
       setIsSaving(false)
-    }
-  }
-
-  const handleRoleChange = async (newRole: string) => {
-    if (!user?.id || newRole === profile?.role) return
-    try {
-      await api.updateUserRole(user.id, newRole as 'loved_one' | 'caregiver')
-      await fetchProfile(user.id)
-    } catch (e: any) {
-      alert(e.message)
     }
   }
 
@@ -242,51 +185,6 @@ export default function Profile() {
         </CardContent>
       </Card>
 
-      {/* People I Care For (Giver side) */}
-      {profile?.role === 'caregiver' && (
-        <Card className="rounded-2xl shadow-md border-0 bg-background overflow-hidden">
-          <CardHeader className="pb-3 bg-rose-50/50 dark:bg-rose-950/10">
-            <CardTitle className="text-xl flex items-center gap-2">
-              <HeartPulse className="text-rose-500 w-6 h-6" />
-              {t('caregiver.my_takers')}
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="p-4 space-y-3">
-            {loadingTakers ? (
-              <div className="flex justify-center py-4"><Loader2 className="animate-spin text-rose-500" /></div>
-            ) : takers.length === 0 ? (
-              <p className="text-sm text-muted-foreground text-center py-4">{t('caregiver.no_takers')}</p>
-            ) : (
-              takers.map((taker) => (
-                <div key={taker.id} className="flex items-center justify-between p-3 bg-secondary/20 rounded-xl border border-secondary/50">
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-full bg-rose-500/10 flex items-center justify-center">
-                      <User className="w-5 h-5 text-rose-500" />
-                    </div>
-                    <div className="flex flex-col">
-                      <div className="flex items-center gap-2">
-                        <p className="font-semibold text-sm">{taker.display_name_ko || 'Taker'}</p>
-                        {!taker.accepted_at && <Badge variant="outline" className="text-[10px] h-4 px-1.5 border-amber-300 text-amber-700 bg-amber-50">{t('common.pending')}</Badge>}
-                      </div>
-                      {!taker.accepted_at && <p className="text-[10px] text-amber-600 mt-0.5">{t('caregiver.awaiting_acceptance')}</p>}
-                    </div>
-                  </div>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="text-destructive hover:bg-destructive/10 h-8 px-2 rounded-full"
-                    onClick={() => handleDisconnectTaker(taker)}
-                    disabled={!!actionId}
-                  >
-                    {actionId === taker.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <><Trash2 className="w-4 h-4 mr-1" /> {t('common.delete')}</>}
-                  </Button>
-                </div>
-              ))
-            )}
-          </CardContent>
-        </Card>
-      )}
-
       {/* Language Toggle */}
       <Card className="rounded-2xl shadow-md border-0 bg-background">
         <CardContent className="p-4 flex items-center justify-between">
@@ -318,18 +216,6 @@ export default function Profile() {
           <div className="space-y-2">
             <Label>{t('profile.name')}</Label>
             <Input disabled value={profile?.name_ko || ''} className="h-12 bg-secondary/50" />
-          </div>
-          <div className="space-y-2">
-            <Label>{t('profile.change_role')}</Label>
-            <Select value={profile?.role || 'loved_one'} onValueChange={handleRoleChange}>
-              <SelectTrigger className="h-12">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="loved_one">{t('profile.role_taker')}</SelectItem>
-                <SelectItem value="caregiver">{t('profile.role_giver')}</SelectItem>
-              </SelectContent>
-            </Select>
           </div>
           <div className="space-y-2">
             <Label>{t('profile.phone')}</Label>

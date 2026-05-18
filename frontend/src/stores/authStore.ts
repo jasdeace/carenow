@@ -7,7 +7,6 @@ interface UserProfile {
   email: string | null
   name_ko: string | null
   phone_kr: string | null
-  role: 'loved_one' | 'caregiver' | 'primary' | 'viewer' | null
   tier: 'free' | 'premium'
   token_balance: number
 }
@@ -43,7 +42,7 @@ export const useAuthStore = create<AuthState>((set) => ({
       set({ isLoading: true })
       const { data, error } = await supabase
         .from('users')
-        .select('id, email, name_ko, phone_kr, role, tier, token_balance')
+        .select('id, email, name_ko, phone_kr, tier, token_balance')
         .eq('id', userId)
         .single()
 

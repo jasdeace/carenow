@@ -262,17 +262,17 @@ export default function TakerHome() {
     <div className="flex flex-col bg-secondary/20 px-4 pt-6 pb-6 space-y-4 max-w-md mx-auto">
       
       {/* Header / Greeting */}
-      <div className="space-y-1">
-        <h1 className="text-2xl font-bold text-foreground">{getGreeting()}</h1>
-        <p className="text-sm text-muted-foreground">
+      <div className="flex items-baseline justify-between gap-2">
+        <h1 className="text-lg font-bold text-foreground">{getGreeting()}</h1>
+        <p className="text-xs text-muted-foreground shrink-0">
           {format(currentTime, 'PPP (EEEE)', { locale: dateLocale })}
         </p>
       </div>
 
       {/* Daily Check-in */}
-      <Button 
+      <Button
         variant={hasCheckedIn ? "secondary" : "default"}
-        className={`w-full h-16 text-xl rounded-2xl shadow-lg transition-all ${
+        className={`w-full h-12 text-base rounded-xl shadow-md transition-all ${
           hasCheckedIn ? 'opacity-80' : 'bg-primary hover:bg-primary/90'
         }`}
         onClick={handleCheckin}
@@ -307,17 +307,17 @@ export default function TakerHome() {
                   <span className="text-lg text-muted-foreground">{dose.dosage_amount}{dose.dosage_unit}</span>
                 </div>
                 {dose.is_taken ? (
-                  <Button 
+                  <Button
                     variant="outline"
-                    className="w-full h-16 text-xl rounded-xl border-yellow-500/50 text-yellow-600 bg-yellow-50/30"
+                    className="w-full h-11 text-base rounded-xl border-yellow-500/50 text-yellow-600 bg-yellow-50/30"
                     onClick={() => handleUndoMed(dose)}
                   >
                     {t('common.undo')}
                   </Button>
                 ) : (
-                  <Button 
+                  <Button
                     variant="default"
-                    className="w-full h-16 text-xl rounded-xl shadow-md"
+                    className="w-full h-11 text-base rounded-xl shadow-md"
                     onClick={() => handleTakeMed(dose)}
                   >
                     {t('home.took_it')}
@@ -406,7 +406,7 @@ export default function TakerHome() {
                   <input type="number" inputMode="numeric" pattern="[0-9]*" value={pulse} onChange={e => setPulse(e.target.value)} className="w-full h-12 text-xl text-center bg-secondary/50 rounded-xl border-0 outline-none focus:ring-2 focus:ring-primary/50" placeholder="72" />
                 </div>
               </div>
-              <Button type="submit" disabled={isSubmittingBP || !sys || !dia} className="w-full h-12 text-lg rounded-xl">
+              <Button type="submit" disabled={isSubmittingBP || !sys || !dia} className="w-full h-10 text-base rounded-xl">
                 {t('common.save')}
               </Button>
             </form>

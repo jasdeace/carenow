@@ -498,17 +498,13 @@ export const api = {
     // 1. Find user by phone
     const { data: users, error: userError } = await supabase
       .from('users')
-      .select('id, role')
+      .select('id')
       .eq('phone_kr', phone)
 
     if (userError) throw userError
     if (!users || users.length === 0) throw new Error('가입되지 않은 전화번호입니다.')
 
-    // Pick a user (prioritize loved_one if multiple accounts share the same phone)
-    let userData = users.find(u => u.role === 'loved_one')
-    if (!userData) {
-      userData = users.find(u => u.role === 'caregiver') || users[0]
-    }
+    const userData = users[0]
 
     // 2. Find circle_id from loved_ones
     const { data: lovedOneData, error: lovedOneError } = await supabase
@@ -559,14 +555,6 @@ export const api = {
       .from('care_circle_members')
       .delete()
       .eq('id', memberId)
-    if (error) throw error
-  },
-
-  updateUserRole: async (userId: string, role: 'loved_one' | 'caregiver') => {
-    const { error } = await supabase
-      .from('users')
-      .update({ role })
-      .eq('id', userId)
     if (error) throw error
   },
 

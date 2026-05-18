@@ -8,7 +8,6 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Label } from '@/components/ui/label'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 
 export default function Onboarding() {
   const { t } = useTranslation()
@@ -16,7 +15,6 @@ export default function Onboarding() {
   const { user, fetchProfile } = useAuthStore()
   
   const [name, setName] = useState('')
-  const [role, setRole] = useState<string>('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -35,7 +33,6 @@ export default function Onboarding() {
       .update({
         name_ko: name,
         phone_kr: phoneFromAuth,
-        role: role
       })
       .eq('id', user.id)
 
@@ -78,22 +75,9 @@ export default function Onboarding() {
               />
             </div>
             
-            <div className="space-y-2">
-              <Label htmlFor="role">{t('auth.role')}</Label>
-              <Select value={role} onValueChange={setRole} required>
-                <SelectTrigger id="role" className="h-14 text-lg">
-                  <SelectValue placeholder={t('auth.role_placeholder')} />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="loved_one">{t('roles.loved_one')}</SelectItem>
-                  <SelectItem value="caregiver">{t('roles.caregiver')}</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-
             {error && <p className="text-sm text-destructive">{error}</p>}
-            
-            <Button className="w-full text-lg h-12 mt-4" type="submit" disabled={loading || !role}>
+
+            <Button className="w-full text-lg h-12 mt-4" type="submit" disabled={loading || !name}>
               {loading ? t('common.loading') : t('common.save')}
             </Button>
           </form>

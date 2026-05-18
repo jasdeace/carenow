@@ -22,7 +22,7 @@ function ProtectedRoute({ children, requireProfile = true }: { children: React.R
   if (isLoading) return <div className="flex h-screen items-center justify-center">Loading...</div>
   if (!user) return <Navigate to="/login" />
   
-  if (requireProfile && profile && !profile.role) {
+  if (requireProfile && profile && !profile.name_ko) {
     return <Navigate to="/onboarding" />
   }
 
