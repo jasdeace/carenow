@@ -510,7 +510,13 @@ export default function LabResults() {
       
       <Dialog open={!!chatLab} onOpenChange={(open) => !open && setChatLab(null)}>
         <DialogContent className="w-full max-w-md translate-y-0 rounded-none border-0 flex flex-col p-0 overflow-hidden gap-0"
-          style={{ height: `${chatViewport.height}px`, maxHeight: `${chatViewport.height}px`, top: `${chatViewport.top}px` }}>
+          style={{
+            // Sit the whole dialog inside the safe area so the header and
+            // close button clear the status bar / home indicator.
+            top: `calc(${chatViewport.top}px + env(safe-area-inset-top, 0px))`,
+            height: `calc(${chatViewport.height}px - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px))`,
+            maxHeight: `calc(${chatViewport.height}px - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px))`,
+          }}>
           <DialogHeader className="p-4 border-b bg-secondary/10 shrink-0">
             <DialogTitle className="text-xl flex items-center gap-2">
               <MessageSquare className="w-5 h-5 text-primary" />
