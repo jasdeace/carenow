@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { View, Text, Pressable, TextInput, ActivityIndicator, Alert, Linking } from 'react-native';
+import { View, Text, Pressable, ActivityIndicator, Alert, Linking } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 
 import { useAuthStore } from '@/stores/authStore';
@@ -21,19 +21,17 @@ type Dose = {
   medication_logs?: any[];
 };
 
+const viewerInfo = (v: any) => (Array.isArray(v.users) ? v.users[0] : v.users) || {};
+
 export function TakerHome() {
   const { user, profile } = useAuthStore();
   const [meds, setMeds] = useState<any[]>([]);
   const [hasCheckedIn, setHasCheckedIn] = useState(false);
   const [weekly, setWeekly] = useState<any[]>([]);
-  const [latestBP, setLatestBP] = useState<any>(null);
+  const [viewers, setViewers] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-
-  const [sys, setSys] = useState('');
-  const [dia, setDia] = useState('');
-  const [pulse, setPulse] = useState('');
-  const [submittingBP, setSubmittingBP] = useState(false);
   const [sendingSOS, setSendingSOS] = useState(false);
+  const [busyViewer, setBusyViewer] = useState<string | null>(null);
 
   const today = new Date();
 
@@ -44,16 +42,24 @@ export function TakerHome() {
   const load = async () => {
     if (!user?.id) return;
     try {
-      const [m, c, p, bp] = await Promise.all([
+      const [m, c, p] = await Promise.all([
         api.getTodayMedications(user.id),
         api.getTodayCheckin(user.id),
         api.getWeeklyAdherence(user.id),
-        api.getVitalsBP(user.id),
       ]);
       setMeds(m || []);
       setHasCheckedIn(!!c);
       setWeekly(p || []);
-      setLatestBP(bp && bp.length > 0 ? bp[0] : null);
+      // Who is connected to / watching this user's data
+      try {
+        const circleId = await api.getLovedOneCircleId(user.id);
+        if (circleId) {
+          const members = await api.getCareCircleViewers(circleId);
+          setViewers((members || []).filter((v: any) => v.user_id !== user.id));
+        }
+      } catch (e) {
+        console.error('viewers load failed:', e);
+      }
     } catch (e) {
       console.error('TakerHome load failed:', e);
     } finally {
@@ -132,21 +138,39 @@ export function TakerHome() {
     }
   };
 
-  const submitBP = async () => {
-    if (!user?.id || !sys || !dia) return;
-    setSubmittingBP(true);
+  const acceptViewer = async (v: any) => {
+    setBusyViewer(v.id);
     try {
-      await api.logVitalBP(user.id, Number(sys), Number(dia), pulse ? Number(pulse) : undefined);
-      const bp = await api.getVitalsBP(user.id);
-      setLatestBP(bp && bp.length > 0 ? bp[0] : null);
-      setSys('');
-      setDia('');
-      setPulse('');
-    } catch (e) {
-      console.error(e);
+      await api.acceptCareCircleMember(v.id);
+      setViewers((prev) =>
+        prev.map((x) => (x.id === v.id ? { ...x, accepted_at: new Date().toISOString() } : x)),
+      );
+    } catch (e: any) {
+      Alert.alert('오류', e?.message ?? '');
     } finally {
-      setSubmittingBP(false);
+      setBusyViewer(null);
     }
+  };
+
+  const removeViewer = (v: any) => {
+    Alert.alert('연결 해제', `${viewerInfo(v).name_ko || '이 사람'}의 접근을 해제할까요?`, [
+      { text: '취소', style: 'cancel' },
+      {
+        text: '해제',
+        style: 'destructive',
+        onPress: async () => {
+          setBusyViewer(v.id);
+          try {
+            await api.removeCareCircleMember(v.id);
+            setViewers((prev) => prev.filter((x) => x.id !== v.id));
+          } catch (e: any) {
+            Alert.alert('오류', e?.message ?? '');
+          } finally {
+            setBusyViewer(null);
+          }
+        },
+      },
+    ]);
   };
 
   const sos = () => {
@@ -292,51 +316,56 @@ export function TakerHome() {
         </View>
       )}
 
-      {/* Blood pressure */}
+      {/* Who can see my data */}
       <View className="rounded-2xl bg-background p-4 shadow-sm">
-        <View className="mb-3 flex-row items-center justify-between">
-          <View className="flex-row items-center gap-2">
-            <Ionicons name="heart" size={18} color="#ef4444" />
-            <Text className="text-base font-bold text-foreground">혈압 기록</Text>
+        <View className="mb-3 flex-row items-center gap-2">
+          <Ionicons name="eye" size={18} color="#16a34a" />
+          <Text className="text-lg font-bold text-foreground">내 건강을 보는 사람</Text>
+        </View>
+        {viewers.length === 0 ? (
+          <Text className="py-1 text-sm text-muted-foreground">아직 연결된 사람이 없습니다.</Text>
+        ) : (
+          <View className="gap-2">
+            {viewers.map((v) => {
+              const info = viewerInfo(v);
+              const pending = !v.accepted_at;
+              return (
+                <View
+                  key={v.id}
+                  className={`flex-row items-center justify-between rounded-xl border p-3 ${
+                    pending ? 'border-amber-200 bg-amber-50' : 'border-transparent bg-secondary'
+                  }`}
+                >
+                  <View className="flex-1">
+                    <Text className="text-sm font-semibold text-foreground">
+                      {info.name_ko || info.email || '사용자'}
+                    </Text>
+                    <Text className="text-xs text-muted-foreground">
+                      {pending ? '수락 대기 중' : '연결됨'}
+                    </Text>
+                  </View>
+                  {busyViewer === v.id ? (
+                    <ActivityIndicator size="small" color="#16a34a" />
+                  ) : (
+                    <View className="flex-row items-center gap-1">
+                      {pending && (
+                        <Pressable
+                          onPress={() => acceptViewer(v)}
+                          className="rounded-lg bg-primary px-3 py-1.5"
+                        >
+                          <Text className="text-xs font-bold text-primary-foreground">수락</Text>
+                        </Pressable>
+                      )}
+                      <Pressable onPress={() => removeViewer(v)} className="p-1.5">
+                        <Ionicons name="trash-outline" size={18} color="#ef4444" />
+                      </Pressable>
+                    </View>
+                  )}
+                </View>
+              );
+            })}
           </View>
-          {latestBP && (
-            <Text className="text-sm text-muted-foreground">
-              최근:{' '}
-              <Text className="font-bold text-rose-500">{latestBP.systolic}</Text>/
-              <Text className="font-bold text-blue-500">{latestBP.diastolic}</Text>
-            </Text>
-          )}
-        </View>
-        <View className="mb-3 flex-row gap-2">
-          {[
-            { v: sys, set: setSys, ph: '수축기' },
-            { v: dia, set: setDia, ph: '이완기' },
-            { v: pulse, set: setPulse, ph: '맥박' },
-          ].map((f) => (
-            <TextInput
-              key={f.ph}
-              value={f.v}
-              onChangeText={f.set}
-              placeholder={f.ph}
-              placeholderTextColor="#a1a1aa"
-              keyboardType="number-pad"
-              className="h-12 flex-1 rounded-xl bg-secondary text-center text-lg text-foreground"
-            />
-          ))}
-        </View>
-        <Pressable
-          onPress={submitBP}
-          disabled={submittingBP || !sys || !dia}
-          className={`h-10 items-center justify-center rounded-xl bg-primary ${
-            submittingBP || !sys || !dia ? 'opacity-50' : ''
-          }`}
-        >
-          {submittingBP ? (
-            <ActivityIndicator color="#ffffff" />
-          ) : (
-            <Text className="text-base font-semibold text-primary-foreground">저장</Text>
-          )}
-        </Pressable>
+        )}
       </View>
 
       {/* SOS */}

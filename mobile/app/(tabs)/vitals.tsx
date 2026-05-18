@@ -160,7 +160,11 @@ export default function Vitals() {
 
   return (
     <SafeAreaView edges={['top']} className="flex-1 bg-secondary">
-      <ScrollView contentContainerClassName="p-4 gap-4">
+      <ScrollView
+        contentContainerClassName="p-4 gap-4 pb-10"
+        automaticallyAdjustKeyboardInsets
+        keyboardShouldPersistTaps="handled"
+      >
         <Text className="text-2xl font-bold text-foreground">{t('vitals.title')}</Text>
 
         {/* Weekly adherence */}

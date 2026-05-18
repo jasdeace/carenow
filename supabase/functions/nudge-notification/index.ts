@@ -45,13 +45,18 @@ serve(async (req: Request) => {
       .eq('user_id', takerUserId)
       .maybeSingle()
 
+    // Handled cases return 200 with { success:false } so the app shows a
+    // friendly message instead of a generic "non-2xx" error.
+    const ok = (payload: any, status = 200) =>
+      new Response(JSON.stringify(payload), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        status,
+      })
+
     if (lovedOne?.last_nudged_at) {
       const diff = Date.now() - new Date(lovedOne.last_nudged_at).getTime()
       if (diff < 60 * 60 * 1000) {
-        return new Response(
-          JSON.stringify({ success: false, message: '한 시간에 한 번만 재촉할 수 있습니다.' }),
-          { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 429 },
-        )
+        return ok({ success: false, message: '한 시간에 한 번만 재촉할 수 있습니다.' })
       }
     }
 
@@ -59,10 +64,13 @@ serve(async (req: Request) => {
       .from('users')
       .select('fcm_token')
       .eq('id', takerUserId)
-      .single()
+      .maybeSingle()
 
     if (!isExpoToken(userData?.fcm_token)) {
-      throw new Error('Target user has no push token')
+      return ok({
+        success: false,
+        message: '대상자가 아직 앱에서 알림을 켜지 않아 알림을 보낼 수 없습니다.',
+      })
     }
 
     const title = '약 복용 알림'
