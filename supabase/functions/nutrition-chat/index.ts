@@ -37,10 +37,20 @@ serve(async (req: Request) => {
       .eq('user_id', userId)
       .maybeSingle()
 
+    // Latest body composition (InBody) for more precise coaching
+    const { data: bodyRows } = await supabase
+      .from('body_composition')
+      .select('weight_kg, skeletal_muscle_kg, body_fat_kg, body_fat_pct, recorded_at')
+      .eq('user_id', userId)
+      .order('recorded_at', { ascending: false })
+      .limit(1)
+    const bodyRow = bodyRows?.[0] || null
+
     const contextStr = JSON.stringify({
       today_entries: todayEntries || [],
       daily_summary: dailySummary || {},
       nutrition_goal: goalRow || { daily_calorie_goal: null, goal_type: null, notes: null },
+      body_composition: bodyRow,
     }, null, 2)
 
     const systemInstruction = `You are a professional nutrition and fitness coach AI for the CareNow app.
@@ -59,7 +69,9 @@ YOUR JOB:
 2. COACHING — When asked for advice, compare today's intake and exercise (from
    daily_summary / today_entries) against their nutrition_goal and give concrete,
    encouraging guidance: how many calories they have left, whether protein is on track,
-   what to eat next, whether to add exercise.
+   what to eat next, whether to add exercise. When body_composition is available
+   (weight, skeletal muscle mass, body fat %), use it to make calorie and especially
+   PROTEIN targets more precise (e.g. protein scaled to lean/muscle mass).
 3. LOGGING — When the user mentions food or exercise, log it via add_meal / add_activity.
 
 ACTIONS — include an "actions" array in your JSON response:

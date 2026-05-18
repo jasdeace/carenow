@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { View, Text, Pressable, ScrollView, TextInput, ActivityIndicator } from 'react-native';
+import { View, Text, Pressable, ScrollView, TextInput, ActivityIndicator, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTranslation } from 'react-i18next';
 import { Ionicons } from '@expo/vector-icons';
@@ -9,6 +9,21 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useAuthStore } from '@/stores/authStore';
 import { api } from '@/lib/api';
 import { LineChartMini } from '@/components/LineChartMini';
+import { pickImage } from '@/lib/camera';
+import { processImageOCR } from '@/lib/ocr';
+
+// Pull a numeric value out of an OCR metrics object by key keywords.
+function findMetric(metrics: any, keywords: string[]): string {
+  if (!metrics || typeof metrics !== 'object') return '';
+  for (const [k, v] of Object.entries(metrics)) {
+    const key = k.toLowerCase();
+    if (keywords.some((kw) => key.includes(kw.toLowerCase()))) {
+      const m = String(v ?? '').match(/-?[\d.]+/);
+      if (m) return m[0];
+    }
+  }
+  return '';
+}
 
 const TIMINGS = [
   { key: 'fasting', label: '공복' },
@@ -90,8 +105,18 @@ export default function Vitals() {
   const user = useAuthStore((s) => s.user);
 
   const [vis, setVis] = useState({ bp: true, glucose: true, weight: true });
-  const [open, setOpen] = useState({ bp: true, glucose: true, weight: true });
+  const [open, setOpen] = useState({ bp: true, glucose: true, weight: true, body: true });
   const [loading, setLoading] = useState(false);
+
+  const [bodyComp, setBodyComp] = useState<any[]>([]);
+  const [ocrLoading, setOcrLoading] = useState(false);
+  const [bcWeight, setBcWeight] = useState('');
+  const [bcMuscle, setBcMuscle] = useState('');
+  const [bcFat, setBcFat] = useState('');
+  const bodyFatPct =
+    Number(bcWeight) > 0 && Number(bcFat) > 0
+      ? Number(((Number(bcFat) / Number(bcWeight)) * 100).toFixed(1))
+      : 0;
 
   const [weekly, setWeekly] = useState<any[]>([]);
   const [bp, setBp] = useState<any[]>([]);
@@ -127,20 +152,59 @@ export default function Vitals() {
   const load = async () => {
     if (!user?.id) return;
     try {
-      const [b, g, w, wk] = await Promise.all([
+      const [b, g, w, wk, bc] = await Promise.all([
         api.getVitalsBP(user.id),
         api.getVitalsGlucose(user.id),
         api.getVitalsWeight(user.id),
         api.getWeeklyAdherence(user.id),
+        api.getBodyComposition(user.id),
       ]);
       setBp(b || []);
       setGlucose(g || []);
       setWeight(w || []);
       setWeekly(wk || []);
+      setBodyComp(bc || []);
     } catch (e) {
       console.error(e);
     }
   };
+
+  const scanInBody = async () => {
+    const b64 = await pickImage('camera', { quality: 0.85, maxWidth: 1800 });
+    if (!b64) return;
+    setOcrLoading(true);
+    try {
+      const result = await processImageOCR([b64]);
+      const m = result.parsedData?.metrics ?? result.parsedData ?? {};
+      const w = findMetric(m, ['체중', 'weight']);
+      const sm = findMetric(m, ['골격근', 'smm']);
+      const bf = findMetric(m, ['체지방량', 'body fat mass', 'bfm']);
+      if (w) setBcWeight(w);
+      if (sm) setBcMuscle(sm);
+      if (bf) setBcFat(bf);
+      if (!w && !sm && !bf) {
+        Alert.alert('인식 실패', 'InBody 수치를 찾지 못했습니다. 직접 입력해주세요.');
+      }
+    } catch (e: any) {
+      Alert.alert('인식 실패', e?.message || '다시 시도해주세요');
+    } finally {
+      setOcrLoading(false);
+    }
+  };
+
+  const saveBodyComp = () =>
+    submit(async () => {
+      await api.logBodyComposition(user!.id, {
+        weight_kg: Number(bcWeight) || 0,
+        skeletal_muscle_kg: Number(bcMuscle) || 0,
+        body_fat_kg: Number(bcFat) || 0,
+        body_fat_pct: bodyFatPct,
+        source: 'manual',
+      });
+      setBcWeight('');
+      setBcMuscle('');
+      setBcFat('');
+    });
 
   const submit = async (fn: () => Promise<any>) => {
     if (!user?.id) return;
@@ -354,6 +418,61 @@ export default function Vitals() {
             />
           </Section>
         )}
+
+        {/* Body composition (InBody) */}
+        <Section
+          title="체성분 (InBody)"
+          icon="body"
+          color="#8b5cf6"
+          open={open.body}
+          onToggle={() => setOpen((o) => ({ ...o, body: !o.body }))}
+        >
+          <Pressable
+            onPress={scanInBody}
+            disabled={ocrLoading}
+            className="mt-1 h-16 flex-row items-center justify-center gap-2 rounded-xl border border-violet-300 bg-violet-50"
+          >
+            {ocrLoading ? (
+              <ActivityIndicator color="#8b5cf6" />
+            ) : (
+              <>
+                <Ionicons name="camera" size={20} color="#8b5cf6" />
+                <Text className="font-medium text-violet-600">InBody 결과지 촬영</Text>
+              </>
+            )}
+          </Pressable>
+
+          {bodyComp.slice(0, 6).map((e) => (
+            <View key={e.id} className="mt-1.5 rounded-xl bg-secondary px-3 py-2.5">
+              <View className="flex-row items-center justify-between">
+                <Text className="text-base font-bold text-violet-600">{e.weight_kg} kg</Text>
+                <Pressable onPress={() => submit(() => api.deleteBodyComposition(e.id))}>
+                  <Ionicons name="trash-outline" size={16} color="#ef4444" />
+                </Pressable>
+              </View>
+              <Text className="text-xs text-muted-foreground">
+                골격근 {e.skeletal_muscle_kg}kg · 체지방 {e.body_fat_kg}kg · 체지방률{' '}
+                {e.body_fat_pct}%{'  '}
+                {format(new Date(e.recorded_at), 'M/d')}
+              </Text>
+            </View>
+          ))}
+
+          <View className="mt-3 flex-row gap-3">
+            <NumField label="체중 (kg)" value={bcWeight} onChange={setBcWeight} />
+            <NumField label="골격근량 (kg)" value={bcMuscle} onChange={setBcMuscle} />
+          </View>
+          <View className="mt-3 flex-row gap-3">
+            <NumField label="체지방량 (kg)" value={bcFat} onChange={setBcFat} />
+            <View className="flex-1">
+              <Text className="mb-1 text-sm text-muted-foreground">체지방률 (%)</Text>
+              <View className="h-14 items-center justify-center rounded-xl bg-secondary/60">
+                <Text className="text-xl text-muted-foreground">{bodyFatPct || '-'}</Text>
+              </View>
+            </View>
+          </View>
+          <SaveButton loading={loading} onPress={saveBodyComp} />
+        </Section>
       </ScrollView>
     </SafeAreaView>
   );

@@ -794,6 +794,45 @@ export const api = {
     if (error) throw error
   },
 
+  // ============ BODY COMPOSITION (InBody) ============
+  getBodyComposition: async (userId: string) => {
+    const { data, error } = await supabase
+      .from('body_composition')
+      .select('*')
+      .eq('user_id', userId)
+      .order('recorded_at', { ascending: false })
+      .limit(30)
+    if (error) throw error
+    return data || []
+  },
+
+  logBodyComposition: async (
+    userId: string,
+    v: {
+      weight_kg: number
+      skeletal_muscle_kg: number
+      body_fat_kg: number
+      body_fat_pct: number
+      source?: string
+    },
+  ) => {
+    const { error } = await supabase.from('body_composition').insert({
+      user_id: userId,
+      weight_kg: v.weight_kg,
+      skeletal_muscle_kg: v.skeletal_muscle_kg,
+      body_fat_kg: v.body_fat_kg,
+      body_fat_pct: v.body_fat_pct,
+      source: v.source || 'manual',
+      recorded_at: new Date().toISOString(),
+    })
+    if (error) throw error
+  },
+
+  deleteBodyComposition: async (id: string) => {
+    const { error } = await supabase.from('body_composition').delete().eq('id', id)
+    if (error) throw error
+  },
+
   getNutritionGoal: async (userId: string) => {
     const { data, error } = await supabase
       .from('nutrition_goals')
