@@ -16,15 +16,22 @@ index 0000000..e69de29
 diff --git a/node_modules/react-native-css-interop/.cache/windows.js b/node_modules/react-native-css-interop/.cache/windows.js
 new file mode 100644
 index 0000000..e69de29
-diff --git a/node_modules/react-native-css-interop/dist/runtime/native/.render-component.js.swp b/node_modules/react-native-css-interop/dist/runtime/native/.render-component.js.swp
-new file mode 100644
-index 0000000..2432004
-Binary files /dev/null and b/node_modules/react-native-css-interop/dist/runtime/native/.render-component.js.swp differ
 diff --git a/node_modules/react-native-css-interop/dist/runtime/native/render-component.js b/node_modules/react-native-css-interop/dist/runtime/native/render-component.js
-index eba25ec..2b71d65 100644
+index eba25ec..5b12208 100644
 --- a/node_modules/react-native-css-interop/dist/runtime/native/render-component.js
 +++ b/node_modules/react-native-css-interop/dist/runtime/native/render-component.js
-@@ -131,8 +131,13 @@ function stringify(object) {
+@@ -118,7 +118,9 @@ function createAnimatedComponent(Component) {
+     return AnimatedComponent;
+ }
+ function printUpgradeWarning(warning, originalProps) {
+-    console.log(`CssInterop upgrade warning.\n\n${warning}.\n\nThis warning was caused by a component with the props:\n${stringify(originalProps)}\n\nIf adding or removing sibling components caused this warning you should add a unique "key" prop to your components. https://react.dev/learn/rendering-lists#keeping-list-items-in-order-with-key\n`);
++    // Patched: the original recursively stringified the entire component
++    // tree for a dev console.log, freezing the JS thread. No-op instead.
++    return;
+ }
+ function stringify(object) {
+     const seen = new WeakSet();
+@@ -131,8 +133,13 @@ function stringify(object) {
          }
          seen.add(value);
          const newValue = Array.isArray(value) ? [] : {};
