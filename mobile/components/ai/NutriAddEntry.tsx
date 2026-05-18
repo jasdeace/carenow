@@ -194,7 +194,11 @@ export function NutriAddEntry({ open, onClose, onAdded, dateStr }: Props) {
           ))}
         </View>
 
-        <ScrollView contentContainerClassName="px-4 pb-8 gap-4" keyboardShouldPersistTaps="handled">
+        <ScrollView
+          contentContainerClassName="px-4 pb-8 gap-4"
+          keyboardShouldPersistTaps="handled"
+          automaticallyAdjustKeyboardInsets
+        >
           {tab === 'photo' && (
             <View className="gap-3 py-2">
               {loading ? (
