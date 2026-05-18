@@ -1,11 +1,17 @@
-import { useEffect } from 'react'
+import { useState, useEffect } from 'react'
+import { useTranslation } from 'react-i18next'
 import { useAuthStore } from '../stores/authStore'
 import TakerHome from './TakerHome'
 import GiverHome from './GiverHome'
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { notificationService } from '../lib/notifications'
 
 export default function UnifiedHome() {
+  const { t } = useTranslation()
   const { profile } = useAuthStore()
+
+  // Both tabs are always available to every user — no role distinction.
+  const [mode, setMode] = useState<'taker' | 'giver'>('taker')
 
   // Register for push notifications globally when profile is loaded
   useEffect(() => {
@@ -21,12 +27,17 @@ export default function UnifiedHome() {
         <span className="text-lg font-bold text-primary tracking-tight">CareLink</span>
       </div>
 
-      {/* Your own health */}
-      <TakerHome />
+      <div className="sticky top-0 z-10 bg-background/80 backdrop-blur-md pt-2 pb-3 px-4">
+        <Tabs value={mode} onValueChange={(v) => setMode(v as 'taker' | 'giver')} className="w-full max-w-md mx-auto">
+          <TabsList className="grid w-full grid-cols-2 h-11">
+            <TabsTrigger value="taker" className="text-base">{t('home.taker_tab')}</TabsTrigger>
+            <TabsTrigger value="giver" className="text-base">{t('home.giver_tab')}</TabsTrigger>
+          </TabsList>
+        </Tabs>
+      </div>
 
-      {/* People you're connected to */}
-      <div className="px-4 pb-6">
-        <GiverHome />
+      <div className="flex-1 w-full">
+        {mode === 'taker' ? <TakerHome /> : <div className="px-4 pt-4"><GiverHome /></div>}
       </div>
     </div>
   )
