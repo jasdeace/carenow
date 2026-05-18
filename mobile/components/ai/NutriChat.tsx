@@ -11,7 +11,7 @@ import {
   ActivityIndicator,
   Alert,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, SafeAreaProvider } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 
 import { useAuthStore } from '@/stores/authStore';
@@ -115,8 +115,9 @@ export function NutriChat({ todayEntries, dailySummary, onEntriesChanged }: Prop
 
       {/* Full-screen chat, lifted by the measured keyboard height */}
       <Modal visible={expanded} animationType="slide" onRequestClose={() => setExpanded(false)}>
-        <View className="flex-1 bg-background" style={{ paddingBottom: kbHeight }}>
-          <SafeAreaView className="flex-1 bg-background" edges={['top', 'bottom']}>
+        <SafeAreaProvider>
+          <View className="flex-1 bg-background" style={{ paddingBottom: kbHeight }}>
+            <SafeAreaView className="flex-1 bg-background" edges={['top', 'bottom']}>
             <View className="flex-row items-center justify-between border-b border-border bg-violet-50 p-3">
               <View className="flex-row items-center gap-2">
                 <Ionicons name="sparkles" size={20} color="#8b5cf6" />
@@ -178,8 +179,9 @@ export function NutriChat({ todayEntries, dailySummary, onEntriesChanged }: Prop
                 <Ionicons name="send" size={18} color="#ffffff" />
               </Pressable>
             </View>
-          </SafeAreaView>
-        </View>
+            </SafeAreaView>
+          </View>
+        </SafeAreaProvider>
       </Modal>
     </>
   );

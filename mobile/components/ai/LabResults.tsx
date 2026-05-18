@@ -12,7 +12,7 @@ import {
   Keyboard,
   Platform,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, SafeAreaProvider } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 
 import { useAuthStore } from '@/stores/authStore';
@@ -308,8 +308,9 @@ export function LabResults() {
 
       {/* Lab chat — full-screen modal, lifted by the measured keyboard height */}
       <Modal visible={!!chatLab} animationType="slide" onRequestClose={() => setChatLab(null)}>
-        <View className="flex-1 bg-background" style={{ paddingBottom: kbHeight }}>
-          <SafeAreaView className="flex-1 bg-background" edges={['top', 'bottom']}>
+        <SafeAreaProvider>
+          <View className="flex-1 bg-background" style={{ paddingBottom: kbHeight }}>
+            <SafeAreaView className="flex-1 bg-background" edges={['top', 'bottom']}>
             <View className="flex-row items-center justify-between border-b border-border px-4 py-3">
               <View className="flex-row items-center gap-2">
                 <Ionicons name="chatbubble-ellipses" size={20} color="#16a34a" />
@@ -363,8 +364,9 @@ export function LabResults() {
                 <Ionicons name="send" size={18} color="#ffffff" />
               </Pressable>
             </View>
-          </SafeAreaView>
-        </View>
+            </SafeAreaView>
+          </View>
+        </SafeAreaProvider>
       </Modal>
 
       {/* Upload / scan — in-app overlay (not RN Modal: camera conflicts with it) */}
