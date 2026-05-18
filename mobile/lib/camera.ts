@@ -62,3 +62,50 @@ export async function pickImage(
   if (!manipulated.base64) return null;
   return `data:image/jpeg;base64,${manipulated.base64}`;
 }
+
+// Multi-image variant — camera takes one, library allows multi-select.
+// Used for document OCR (lab sheets, prescriptions) which can span pages.
+export async function pickImages(
+  source: Source,
+  opts: { quality?: number; maxWidth?: number; limit?: number } = {},
+): Promise<string[]> {
+  const ImagePicker = getImagePicker();
+  const ImageManipulator = getImageManipulator();
+  if (!ImagePicker || !ImageManipulator) {
+    Alert.alert('카메라 사용 불가', '앱을 다시 빌드하면 카메라 기능을 사용할 수 있습니다.');
+    return [];
+  }
+
+  const perm =
+    source === 'camera'
+      ? await ImagePicker.requestCameraPermissionsAsync()
+      : await ImagePicker.requestMediaLibraryPermissionsAsync();
+  if (!perm.granted) return [];
+
+  const result =
+    source === 'camera'
+      ? await ImagePicker.launchCameraAsync({ quality: 1, mediaTypes: ['images'] as any })
+      : await ImagePicker.launchImageLibraryAsync({
+          quality: 1,
+          mediaTypes: ['images'] as any,
+          allowsMultipleSelection: true,
+          selectionLimit: opts.limit ?? 5,
+        });
+  if (result.canceled) return [];
+
+  const out: string[] = [];
+  for (const asset of result.assets ?? []) {
+    if (!asset.uri) continue;
+    const m = await ImageManipulator.manipulateAsync(
+      asset.uri,
+      [{ resize: { width: opts.maxWidth ?? 1280 } }],
+      {
+        base64: true,
+        compress: opts.quality ?? 0.6,
+        format: ImageManipulator.SaveFormat.JPEG,
+      },
+    );
+    if (m.base64) out.push(`data:image/jpeg;base64,${m.base64}`);
+  }
+  return out;
+}

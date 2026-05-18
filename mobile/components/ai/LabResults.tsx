@@ -17,7 +17,7 @@ import { Ionicons } from '@expo/vector-icons';
 
 import { useAuthStore } from '@/stores/authStore';
 import { api } from '@/lib/api';
-import { pickImage } from '@/lib/camera';
+import { pickImages } from '@/lib/camera';
 import { processImageOCR } from '@/lib/ocr';
 
 type Msg = { role: 'user' | 'ai'; text: string };
@@ -100,11 +100,11 @@ export function LabResults() {
   const [labDate, setLabDate] = useState('');
 
   const scanLab = async (source: 'camera' | 'library') => {
-    const b64 = await pickImage(source, { quality: 0.85 });
-    if (!b64) return;
+    const images = await pickImages(source, { quality: 0.85 });
+    if (images.length === 0) return;
     setOcrLoading(true);
     try {
-      const result = await processImageOCR([b64]);
+      const result = await processImageOCR(images);
       setScanned(result.parsedData ?? { rawTextSummary: result.rawText });
       const d = result.parsedData?.reportDate;
       setLabDate(d && /^\d{4}-\d{2}-\d{2}$/.test(d) ? d : new Date().toISOString().split('T')[0]);

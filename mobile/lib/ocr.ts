@@ -13,5 +13,10 @@ export async function processImageOCR(imagesBase64: string[]): Promise<OCRResult
   });
   if (error) throw error;
   if (data?.error) throw new Error(data.error);
-  return data as OCRResult;
+  // The edge function returns { rawText, structuredJson } — expose
+  // structuredJson under parsedData (the shape every screen expects).
+  return {
+    rawText: data?.rawText ?? '',
+    parsedData: data?.structuredJson ?? null,
+  };
 }
