@@ -16,6 +16,8 @@ import { Ionicons } from '@expo/vector-icons';
 
 import { useAuthStore } from '@/stores/authStore';
 import { api } from '@/lib/api';
+import { pickImage } from '@/lib/camera';
+import { processImageOCR } from '@/lib/ocr';
 
 type Msg = { role: 'user' | 'ai'; text: string };
 
@@ -73,6 +75,40 @@ export function LabResults() {
   const [chatHistory, setChatHistory] = useState<Msg[]>([]);
   const [chatInput, setChatInput] = useState('');
   const [chatting, setChatting] = useState(false);
+
+  const [uploadOpen, setUploadOpen] = useState(false);
+  const [ocrLoading, setOcrLoading] = useState(false);
+  const [scanned, setScanned] = useState<any>(null);
+  const [labDate, setLabDate] = useState('');
+
+  const scanLab = async () => {
+    const b64 = await pickImage('camera', { quality: 0.85 });
+    if (!b64) return;
+    setOcrLoading(true);
+    try {
+      const result = await processImageOCR([b64]);
+      setScanned(result.parsedData ?? { rawTextSummary: result.rawText });
+      const d = result.parsedData?.reportDate;
+      setLabDate(d && /^\d{4}-\d{2}-\d{2}$/.test(d) ? d : new Date().toISOString().split('T')[0]);
+    } catch (e: any) {
+      Alert.alert('인식 실패', e?.message || '다시 시도해주세요');
+    } finally {
+      setOcrLoading(false);
+    }
+  };
+
+  const saveLab = async () => {
+    if (!user?.id || !scanned) return;
+    try {
+      await api.saveLabResult(user.id, labDate, JSON.stringify(scanned), scanned);
+      setUploadOpen(false);
+      setScanned(null);
+      setLabDate('');
+      load();
+    } catch (e: any) {
+      Alert.alert('저장 실패', e?.message || '');
+    }
+  };
 
   useEffect(() => {
     if (user?.id) load();
@@ -161,7 +197,18 @@ export function LabResults() {
   return (
     <View className="flex-1">
       <ScrollView contentContainerClassName="p-4 gap-3 pb-8">
-        <Text className="text-2xl font-bold text-foreground">검사결과</Text>
+        <View className="flex-row items-center justify-between">
+          <Text className="text-2xl font-bold text-foreground">검사결과</Text>
+          <Pressable
+            onPress={() => {
+              setScanned(null);
+              setUploadOpen(true);
+            }}
+            className="h-11 w-11 items-center justify-center rounded-full bg-primary shadow-lg"
+          >
+            <Ionicons name="add" size={24} color="#fff" />
+          </Pressable>
+        </View>
 
         {loading ? (
           <ActivityIndicator color="#16a34a" className="mt-12" />
@@ -169,7 +216,7 @@ export function LabResults() {
           <View className="mt-6 items-center rounded-2xl border border-dashed border-border bg-background py-12">
             <Ionicons name="document-text-outline" size={44} color="#d4d4d8" />
             <Text className="mt-2 text-sm text-muted-foreground">저장된 검사결과가 없습니다</Text>
-            <Text className="mt-1 text-xs text-muted-foreground">📷 사진 스캔은 Phase 3에서 추가됩니다</Text>
+            <Text className="mt-1 text-xs text-muted-foreground">+ 버튼으로 검사지를 스캔하세요</Text>
           </View>
         ) : (
           labs.map((lab) => {
@@ -307,6 +354,86 @@ export function LabResults() {
               </Pressable>
             </View>
           </KeyboardAvoidingView>
+        </SafeAreaView>
+      </Modal>
+
+      {/* Upload / scan */}
+      <Modal
+        visible={uploadOpen}
+        animationType="slide"
+        presentationStyle="pageSheet"
+        onRequestClose={() => setUploadOpen(false)}
+      >
+        <SafeAreaView className="flex-1 bg-background">
+          <View className="flex-row items-center justify-between border-b border-border px-4 py-3">
+            <Text className="text-lg font-bold text-foreground">검사결과 추가</Text>
+            <Pressable onPress={() => setUploadOpen(false)}>
+              <Ionicons name="close" size={26} color="#71717a" />
+            </Pressable>
+          </View>
+          <ScrollView contentContainerClassName="p-4 gap-4">
+            {ocrLoading ? (
+              <View className="items-center gap-3 py-12">
+                <ActivityIndicator size="large" color="#16a34a" />
+                <Text className="text-primary">검사지를 분석하고 있습니다...</Text>
+              </View>
+            ) : !scanned ? (
+              <Pressable
+                onPress={scanLab}
+                className="h-32 items-center justify-center gap-2 rounded-2xl border border-primary/40 bg-primary/5"
+              >
+                <Ionicons name="camera" size={36} color="#16a34a" />
+                <Text className="text-base font-medium text-primary">검사지 촬영</Text>
+              </Pressable>
+            ) : (
+              <>
+                <View>
+                  <Text className="mb-1 text-sm text-muted-foreground">검사일자</Text>
+                  <TextInput
+                    value={labDate}
+                    onChangeText={setLabDate}
+                    placeholder="YYYY-MM-DD"
+                    placeholderTextColor="#a1a1aa"
+                    className="h-12 rounded-xl border border-border px-3 text-base text-foreground"
+                  />
+                </View>
+                {(() => {
+                  const m = metricsOf(scanned);
+                  return m ? (
+                    <View className="overflow-hidden rounded-xl border border-border">
+                      {Object.entries(m).map(([k, v]) => (
+                        <View
+                          key={k}
+                          className="flex-row justify-between border-b border-border/50 px-4 py-2.5"
+                        >
+                          <Text className="text-sm font-medium text-foreground">{k}</Text>
+                          <Text
+                            className={`text-sm ${
+                              isAbnormal(String(v))
+                                ? 'font-bold text-destructive'
+                                : 'text-muted-foreground'
+                            }`}
+                          >
+                            {String(v)}
+                          </Text>
+                        </View>
+                      ))}
+                    </View>
+                  ) : (
+                    <Text className="text-sm text-muted-foreground">
+                      {scanned.rawTextSummary || JSON.stringify(scanned)}
+                    </Text>
+                  );
+                })()}
+                <Pressable
+                  onPress={saveLab}
+                  className="h-14 items-center justify-center rounded-xl bg-primary"
+                >
+                  <Text className="text-lg font-semibold text-primary-foreground">저장</Text>
+                </Pressable>
+              </>
+            )}
+          </ScrollView>
         </SafeAreaView>
       </Modal>
     </View>

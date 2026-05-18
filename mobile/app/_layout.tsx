@@ -11,6 +11,7 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 
 import { supabase } from '@/lib/supabase';
 import { useAuthStore } from '@/stores/authStore';
+import { notificationService } from '@/lib/notifications';
 
 // Hold the splash until auth state is resolved.
 SplashScreen.preventAutoHideAsync();
@@ -34,7 +35,10 @@ export default function RootLayout() {
 
       setUser(session?.user ?? null);
       useAuthStore.setState({ isLoading: false });
-      if (session?.user) fetchProfile(session.user.id);
+      if (session?.user) {
+        fetchProfile(session.user.id);
+        notificationService.registerForPush(session.user.id);
+      }
 
       SplashScreen.hideAsync();
     })();
@@ -43,8 +47,10 @@ export default function RootLayout() {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((_event, session) => {
       setUser(session?.user ?? null);
-      if (session?.user) fetchProfile(session.user.id);
-      else setProfile(null);
+      if (session?.user) {
+        fetchProfile(session.user.id);
+        notificationService.registerForPush(session.user.id);
+      } else setProfile(null);
     });
 
     return () => {

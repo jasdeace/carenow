@@ -15,6 +15,9 @@ import { Ionicons } from '@expo/vector-icons';
 
 import { useAuthStore } from '@/stores/authStore';
 import { api, cleanDrugName } from '@/lib/api';
+import { pickImage } from '@/lib/camera';
+import { processImageOCR } from '@/lib/ocr';
+import { notificationService } from '@/lib/notifications';
 
 const stripHtml = (s?: string) => (s ? s.replace(/<[^>]+>/g, '').trim() : '');
 
@@ -46,6 +49,31 @@ export default function Medications() {
 
   const [drugDetail, setDrugDetail] = useState<any>(null);
   const [detailLoading, setDetailLoading] = useState(false);
+  const [ocrLoading, setOcrLoading] = useState(false);
+
+  const scanPrescription = async () => {
+    const b64 = await pickImage('camera', { quality: 0.85 });
+    if (!b64) return;
+    setOcrLoading(true);
+    try {
+      const result = await processImageOCR([b64]);
+      const p = result.parsedData;
+      if (p) {
+        setForm((f) => ({
+          ...f,
+          name: cleanDrugName(p.medicationName || f.name),
+          amount: p.dosageAmount || f.amount,
+          unit: p.dosageUnit || f.unit,
+        }));
+      } else if (result.rawText) {
+        setForm((f) => ({ ...f, name: cleanDrugName(result.rawText.split('\n')[0] || '') }));
+      }
+    } catch (e: any) {
+      Alert.alert('인식 실패', e?.message || '다시 시도해주세요');
+    } finally {
+      setOcrLoading(false);
+    }
+  };
 
   useEffect(() => {
     if (user?.id) load();
@@ -112,8 +140,19 @@ export default function Medications() {
     try {
       if (editingId) {
         await api.updateMedication(editingId, form.name, form.amount, form.unit, form.times);
+        await notificationService.cancelMedReminders(editingId);
+        await notificationService.scheduleMedReminders(editingId, form.name, form.times);
       } else {
-        await api.addMedication(user.id, form.name, form.amount, form.unit, user.id, form.times);
+        const created: any = await api.addMedication(
+          user.id,
+          form.name,
+          form.amount,
+          form.unit,
+          user.id,
+          form.times,
+        );
+        const newId = created?.id || created?.[0]?.id;
+        if (newId) await notificationService.scheduleMedReminders(newId, form.name, form.times);
       }
       setFormOpen(false);
       await load();
@@ -151,6 +190,7 @@ export default function Medications() {
         onPress: async () => {
           try {
             await api.deleteMedication(med.id);
+            await notificationService.cancelMedReminders(med.id);
             load();
           } catch (e) {
             console.error(e);
@@ -299,6 +339,20 @@ export default function Medications() {
             </Pressable>
           </View>
           <ScrollView contentContainerClassName="p-4 gap-4" keyboardShouldPersistTaps="handled">
+            <Pressable
+              onPress={scanPrescription}
+              disabled={ocrLoading}
+              className="h-20 items-center justify-center gap-1 rounded-2xl border border-primary/40 bg-primary/5"
+            >
+              {ocrLoading ? (
+                <ActivityIndicator color="#16a34a" />
+              ) : (
+                <>
+                  <Ionicons name="camera" size={24} color="#16a34a" />
+                  <Text className="text-sm font-medium text-primary">처방전 스캔</Text>
+                </>
+              )}
+            </Pressable>
             <View>
               <Text className="mb-1.5 text-sm font-medium text-foreground">
                 {t('meds.med_name')}

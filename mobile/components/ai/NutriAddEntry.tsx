@@ -5,6 +5,7 @@ import { Ionicons } from '@expo/vector-icons';
 
 import { useAuthStore } from '@/stores/authStore';
 import { api } from '@/lib/api';
+import { pickImage } from '@/lib/camera';
 
 type Props = {
   open: boolean;
@@ -22,9 +23,10 @@ const MEAL_TYPES = [
 const ACTIVITIES = ['걷기', '달리기', '헬스', '수영', '자전거', '요가', '등산', '테니스'];
 
 export function NutriAddEntry({ open, onClose, onAdded, dateStr }: Props) {
-  const user = useAuthStore((s) => s.user);
-  const [tab, setTab] = useState<'manual' | 'activity'>('manual');
+  const { user, profile, fetchProfile } = useAuthStore();
+  const [tab, setTab] = useState<'photo' | 'manual' | 'activity'>('photo');
   const [loading, setLoading] = useState(false);
+  const [aiResult, setAiResult] = useState<any>(null);
 
   const [mealDesc, setMealDesc] = useState('');
   const [mealType, setMealType] = useState('lunch');
@@ -38,6 +40,8 @@ export function NutriAddEntry({ open, onClose, onAdded, dateStr }: Props) {
   const [actCalories, setActCalories] = useState('');
 
   const reset = () => {
+    setTab('photo');
+    setAiResult(null);
     setMealDesc('');
     setCalories('');
     setProtein('');
@@ -46,12 +50,41 @@ export function NutriAddEntry({ open, onClose, onAdded, dateStr }: Props) {
     setActName('');
     setActDuration('');
     setActCalories('');
-    setTab('manual');
   };
-
   const close = () => {
     reset();
     onClose();
+  };
+
+  const analyzePhoto = async (source: 'camera' | 'library') => {
+    if (!user?.id) return;
+    if ((profile?.token_balance ?? 0) < 1) {
+      Alert.alert('토큰 부족', '토큰을 충전해주세요.');
+      return;
+    }
+    const b64 = await pickImage(source, { quality: 0.55 });
+    if (!b64) return;
+    setLoading(true);
+    try {
+      const result = await api.analyzeMealPhoto(b64);
+      if (result?.analysis) {
+        const a = result.analysis;
+        setAiResult(a);
+        setMealDesc(a.description || '');
+        setMealType(a.meal_type || 'lunch');
+        setCalories(String(a.calories || 0));
+        setProtein(String(a.protein_g || 0));
+        setCarbs(String(a.carbs_g || 0));
+        setFat(String(a.fat_g || 0));
+        setTab('manual');
+        await api.deductToken(user.id, 1, 'meal_analysis');
+        await fetchProfile(user.id);
+      }
+    } catch (e: any) {
+      Alert.alert('분석 실패', e?.message || '다시 시도해주세요');
+    } finally {
+      setLoading(false);
+    }
   };
 
   const saveMeal = async () => {
@@ -68,6 +101,7 @@ export function NutriAddEntry({ open, onClose, onAdded, dateStr }: Props) {
         protein_g: Number(protein) || 0,
         carbs_g: Number(carbs) || 0,
         fat_g: Number(fat) || 0,
+        ai_analysis: aiResult,
       });
       onAdded();
       close();
@@ -99,13 +133,13 @@ export function NutriAddEntry({ open, onClose, onAdded, dateStr }: Props) {
     }
   };
 
-  const field = (label: string, value: string, set: (v: string) => void, numeric = true) => (
+  const field = (label: string, value: string, set: (v: string) => void) => (
     <View className="flex-1">
       <Text className="mb-1 text-sm text-muted-foreground">{label}</Text>
       <TextInput
         value={value}
         onChangeText={set}
-        keyboardType={numeric ? 'numeric' : 'default'}
+        keyboardType="numeric"
         className="h-12 rounded-xl border border-border px-3 text-base text-foreground"
       />
     </View>
@@ -122,22 +156,69 @@ export function NutriAddEntry({ open, onClose, onAdded, dateStr }: Props) {
         </View>
 
         <View className="flex-row gap-1 bg-secondary p-1" style={{ margin: 16, borderRadius: 12 }}>
-          {(['manual', 'activity'] as const).map((tk) => (
+          {(
+            [
+              { k: 'photo', l: '📷 촬영' },
+              { k: 'manual', l: '✍️ 식사' },
+              { k: 'activity', l: '🏃 활동' },
+            ] as const
+          ).map((tt) => (
             <Pressable
-              key={tk}
-              onPress={() => setTab(tk)}
-              className={`flex-1 items-center rounded-lg py-2.5 ${tab === tk ? 'bg-background shadow-sm' : ''}`}
+              key={tt.k}
+              onPress={() => setTab(tt.k)}
+              className={`flex-1 items-center rounded-lg py-2.5 ${tab === tt.k ? 'bg-background shadow-sm' : ''}`}
             >
-              <Text className={tab === tk ? 'font-semibold text-primary' : 'text-muted-foreground'}>
-                {tk === 'manual' ? '✍️ 식사' : '🏃 활동'}
+              <Text className={tab === tt.k ? 'font-semibold text-primary' : 'text-muted-foreground'}>
+                {tt.l}
               </Text>
             </Pressable>
           ))}
         </View>
 
         <ScrollView contentContainerClassName="px-4 pb-8 gap-4" keyboardShouldPersistTaps="handled">
-          {tab === 'manual' ? (
+          {tab === 'photo' && (
+            <View className="gap-3 py-2">
+              {loading ? (
+                <View className="items-center gap-3 py-12">
+                  <ActivityIndicator size="large" color="#16a34a" />
+                  <Text className="text-primary">AI가 음식을 분석하고 있습니다...</Text>
+                </View>
+              ) : (
+                <>
+                  <Pressable
+                    onPress={() => analyzePhoto('camera')}
+                    className="h-28 items-center justify-center gap-2 rounded-2xl border border-primary/40 bg-primary/5"
+                  >
+                    <Ionicons name="camera" size={32} color="#16a34a" />
+                    <Text className="text-base font-medium text-primary">카메라로 촬영</Text>
+                  </Pressable>
+                  <Pressable
+                    onPress={() => analyzePhoto('library')}
+                    className="h-28 items-center justify-center gap-2 rounded-2xl border border-violet-300 bg-violet-50"
+                  >
+                    <Ionicons name="image" size={32} color="#8b5cf6" />
+                    <Text className="text-base font-medium text-violet-600">갤러리에서 선택</Text>
+                  </Pressable>
+                  <Text className="text-center text-xs text-muted-foreground">
+                    토큰 1개 차감 (잔여: {profile?.token_balance ?? 0}개)
+                  </Text>
+                </>
+              )}
+            </View>
+          )}
+
+          {tab === 'manual' && (
             <>
+              {aiResult && (
+                <View className="rounded-xl border border-emerald-200 bg-emerald-50 p-3">
+                  <Text className="text-xs font-medium text-emerald-600">
+                    🤖 AI 분석 결과 (수정 가능)
+                  </Text>
+                  {aiResult.notes && (
+                    <Text className="mt-1 text-xs text-muted-foreground">{aiResult.notes}</Text>
+                  )}
+                </View>
+              )}
               <View className="flex-row gap-2">
                 {MEAL_TYPES.map((mt) => (
                   <Pressable
@@ -162,7 +243,7 @@ export function NutriAddEntry({ open, onClose, onAdded, dateStr }: Props) {
                 <TextInput
                   value={mealDesc}
                   onChangeText={setMealDesc}
-                  placeholder="예: 비빔밥, 된장찌개"
+                  placeholder="예: 비빔밥"
                   placeholderTextColor="#a1a1aa"
                   className="h-12 rounded-xl border border-border px-3 text-base text-foreground"
                 />
@@ -189,7 +270,9 @@ export function NutriAddEntry({ open, onClose, onAdded, dateStr }: Props) {
                 )}
               </Pressable>
             </>
-          ) : (
+          )}
+
+          {tab === 'activity' && (
             <>
               <View className="flex-row flex-wrap gap-2">
                 {ACTIVITIES.map((a) => (
@@ -235,9 +318,6 @@ export function NutriAddEntry({ open, onClose, onAdded, dateStr }: Props) {
               </Pressable>
             </>
           )}
-          <Text className="text-center text-xs text-muted-foreground">
-            📷 AI 사진 분석은 Phase 3에서 추가됩니다
-          </Text>
         </ScrollView>
       </SafeAreaView>
     </Modal>
