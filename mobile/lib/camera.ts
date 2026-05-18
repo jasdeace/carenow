@@ -1,14 +1,29 @@
-import * as ImagePicker from 'expo-image-picker';
+import { Alert } from 'react-native';
 
 type Source = 'camera' | 'library';
 
-// Returns a data-URI base64 string, or null if cancelled / denied.
+// Lazy-load the native module so a missing/old build can't crash the
+// whole app at import time — only the camera feature degrades.
+function getImagePicker(): typeof import('expo-image-picker') | null {
+  try {
+    return require('expo-image-picker');
+  } catch {
+    return null;
+  }
+}
+
+// Returns a data-URI base64 string, or null if cancelled / denied / unavailable.
 export async function pickImage(
   source: Source,
   opts: { quality?: number } = {},
 ): Promise<string | null> {
-  const quality = opts.quality ?? 0.6;
+  const ImagePicker = getImagePicker();
+  if (!ImagePicker) {
+    Alert.alert('카메라 사용 불가', '앱을 다시 빌드하면 카메라 기능을 사용할 수 있습니다.');
+    return null;
+  }
 
+  const quality = opts.quality ?? 0.6;
   const perm =
     source === 'camera'
       ? await ImagePicker.requestCameraPermissionsAsync()
@@ -18,7 +33,7 @@ export async function pickImage(
   const common = {
     base64: true,
     quality,
-    mediaTypes: ['images'] as ImagePicker.MediaType[],
+    mediaTypes: ['images'] as any,
   };
   const result =
     source === 'camera'
