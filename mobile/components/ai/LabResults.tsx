@@ -5,7 +5,6 @@ import {
   Pressable,
   ScrollView,
   TextInput,
-  Modal,
   StyleSheet,
   ActivityIndicator,
   Alert,
@@ -289,18 +288,14 @@ export function LabResults() {
         )}
       </ScrollView>
 
-      {/* Lab chat */}
-      <Modal
-        visible={!!chatLab}
-        animationType="slide"
-        presentationStyle="pageSheet"
-        onRequestClose={() => setChatLab(null)}
-      >
-        <SafeAreaView className="flex-1 bg-background">
+      {/* Lab chat — in-app overlay so KeyboardAvoidingView measures correctly */}
+      {!!chatLab && (
+        <View style={[StyleSheet.absoluteFillObject, { zIndex: 50 }]} className="bg-background">
           <KeyboardAvoidingView
-            behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+            behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
             className="flex-1"
           >
+            <SafeAreaView className="flex-1 bg-background">
             <View className="flex-row items-center justify-between border-b border-border px-4 py-3">
               <View className="flex-row items-center gap-2">
                 <Ionicons name="chatbubble-ellipses" size={20} color="#16a34a" />
@@ -354,9 +349,10 @@ export function LabResults() {
                 <Ionicons name="send" size={18} color="#ffffff" />
               </Pressable>
             </View>
+          </SafeAreaView>
           </KeyboardAvoidingView>
-        </SafeAreaView>
-      </Modal>
+        </View>
+      )}
 
       {/* Upload / scan — in-app overlay (not RN Modal: camera conflicts with it) */}
       {uploadOpen && (
