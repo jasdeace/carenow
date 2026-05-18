@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { View, Text, Pressable, TextInput, ScrollView, Modal, ActivityIndicator, Alert } from 'react-native';
+import { View, Text, Pressable, TextInput, ScrollView, StyleSheet, ActivityIndicator, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 
@@ -161,8 +161,11 @@ export function NutriAddEntry({ open, onClose, onAdded, dateStr }: Props) {
     </View>
   );
 
+  // In-app overlay (not an RN <Modal>) — launching the camera from inside an
+  // RN Modal on iOS conflicts with native modal presentation.
+  if (!open) return null;
   return (
-    <Modal visible={open} animationType="slide" presentationStyle="pageSheet" onRequestClose={close}>
+    <View style={[StyleSheet.absoluteFillObject, { zIndex: 50 }]}>
       <SafeAreaView className="flex-1 bg-background">
         <View className="flex-row items-center justify-between border-b border-border px-4 py-3">
           <Text className="text-lg font-bold text-foreground">기록 추가</Text>
@@ -336,6 +339,6 @@ export function NutriAddEntry({ open, onClose, onAdded, dateStr }: Props) {
           )}
         </ScrollView>
       </SafeAreaView>
-    </Modal>
+    </View>
   );
 }
