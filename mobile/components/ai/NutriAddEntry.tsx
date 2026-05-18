@@ -85,8 +85,15 @@ export function NutriAddEntry({ open, onClose, onAdded, dateStr }: Props) {
         setCarbs(String(a.carbs_g || 0));
         setFat(String(a.fat_g || 0));
         setTab('manual');
-        await api.deductToken(user.id, 1, 'meal_analysis');
-        await fetchProfile(user.id);
+        console.log('[meal] result shown — switched to edit tab');
+        // Token bookkeeping runs in the background — never block the UI on it
+        api
+          .deductToken(user.id, 1, 'meal_analysis')
+          .then(() => fetchProfile(user.id))
+          .catch((err) => console.log('[meal] token deduct failed:', err?.message));
+      } else {
+        console.log('[meal] no analysis field in result');
+        Alert.alert('분석 실패', '결과를 받지 못했습니다. 다시 시도해주세요.');
       }
     } catch (e: any) {
       console.log('[meal] analyze-meal FAILED after', Date.now() - t0, 'ms:', e?.message, JSON.stringify(e)?.slice(0, 300));
