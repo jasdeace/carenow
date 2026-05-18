@@ -26,6 +26,11 @@ export default function LabResults() {
   const [isChatting, setIsChatting] = useState(false)
   const [manualDate, setManualDate] = useState('')
   const [expandedLabs, setExpandedLabs] = useState<Set<string>>(new Set())
+  // Tracks the keyboard-aware visible viewport so the chat panel stays above the keyboard
+  const [chatViewport, setChatViewport] = useState(() => ({
+    height: window.visualViewport?.height ?? window.innerHeight,
+    top: window.visualViewport?.offsetTop ?? 0,
+  }))
   
   const fileInputRef = useRef<HTMLInputElement>(null)
   const chatScrollRef = useRef<HTMLDivElement>(null)
@@ -40,15 +45,25 @@ export default function LabResults() {
     }
   }, [chatHistory])
 
-  // Handle iOS keyboard: set --visual-vh CSS variable
+  // Keep the chat panel sized to the visible viewport so the keyboard never covers it
   useEffect(() => {
-    const updateVisualVh = () => {
-      const vh = window.visualViewport?.height || window.innerHeight
-      document.documentElement.style.setProperty('--visual-vh', `${vh * 0.85}px`)
+    if (!chatLab) return
+    const vp = window.visualViewport
+    if (!vp) return
+    const update = () => {
+      setChatViewport({ height: vp.height, top: vp.offsetTop })
+      // keep the latest message visible above the keyboard
+      requestAnimationFrame(() => {
+        chatScrollRef.current?.scrollTo({ top: chatScrollRef.current.scrollHeight })
+      })
     }
-    updateVisualVh()
-    window.visualViewport?.addEventListener('resize', updateVisualVh)
-    return () => window.visualViewport?.removeEventListener('resize', updateVisualVh)
+    update()
+    vp.addEventListener('resize', update)
+    vp.addEventListener('scroll', update)
+    return () => {
+      vp.removeEventListener('resize', update)
+      vp.removeEventListener('scroll', update)
+    }
   }, [chatLab])
 
   const loadLabs = async () => {
@@ -494,8 +509,8 @@ export default function LabResults() {
       </div>
       
       <Dialog open={!!chatLab} onOpenChange={(open) => !open && setChatLab(null)}>
-        <DialogContent className="w-11/12 rounded-2xl flex flex-col p-0 overflow-hidden"
-          style={{ maxHeight: 'calc(var(--visual-vh, 85vh))', transition: 'max-height 0.15s ease' }}>
+        <DialogContent className="w-full max-w-md translate-y-0 rounded-none border-0 flex flex-col p-0 overflow-hidden gap-0"
+          style={{ height: `${chatViewport.height}px`, maxHeight: `${chatViewport.height}px`, top: `${chatViewport.top}px` }}>
           <DialogHeader className="p-4 border-b bg-secondary/10 shrink-0">
             <DialogTitle className="text-xl flex items-center gap-2">
               <MessageSquare className="w-5 h-5 text-primary" />
