@@ -6,6 +6,7 @@ import {
   ScrollView,
   TextInput,
   Modal,
+  StyleSheet,
   ActivityIndicator,
   Alert,
 } from 'react-native';
@@ -328,7 +329,9 @@ export default function Medications() {
       )}
 
       {/* Add / Edit form */}
-      <Modal visible={formOpen} animationType="slide" presentationStyle="pageSheet">
+      {/* Add/edit — in-app overlay (not RN Modal: camera conflicts with it) */}
+      {formOpen && (
+        <View style={[StyleSheet.absoluteFillObject, { zIndex: 50 }]}>
         <SafeAreaView className="flex-1 bg-background">
           <View className="flex-row items-center justify-between border-b border-border px-4 py-3">
             <Text className="text-lg font-bold text-foreground">
@@ -469,7 +472,8 @@ export default function Medications() {
             </Pressable>
           </ScrollView>
         </SafeAreaView>
-      </Modal>
+        </View>
+      )}
 
       {/* Drug detail */}
       <Modal visible={!!drugDetail} animationType="slide" presentationStyle="pageSheet">

@@ -6,6 +6,7 @@ import {
   ScrollView,
   TextInput,
   Modal,
+  StyleSheet,
   ActivityIndicator,
   Alert,
   KeyboardAvoidingView,
@@ -357,14 +358,10 @@ export function LabResults() {
         </SafeAreaView>
       </Modal>
 
-      {/* Upload / scan */}
-      <Modal
-        visible={uploadOpen}
-        animationType="slide"
-        presentationStyle="pageSheet"
-        onRequestClose={() => setUploadOpen(false)}
-      >
-        <SafeAreaView className="flex-1 bg-background">
+      {/* Upload / scan — in-app overlay (not RN Modal: camera conflicts with it) */}
+      {uploadOpen && (
+        <View style={[StyleSheet.absoluteFillObject, { zIndex: 50 }]}>
+          <SafeAreaView className="flex-1 bg-background">
           <View className="flex-row items-center justify-between border-b border-border px-4 py-3">
             <Text className="text-lg font-bold text-foreground">검사결과 추가</Text>
             <Pressable onPress={() => setUploadOpen(false)}>
@@ -435,7 +432,8 @@ export function LabResults() {
             )}
           </ScrollView>
         </SafeAreaView>
-      </Modal>
+        </View>
+      )}
     </View>
   );
 }
