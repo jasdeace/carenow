@@ -35,23 +35,8 @@ serve(async (req: Request) => {
       throw new Error("GEMINI_API_KEY is not set in Edge Function secrets")
     }
 
-    // Proactively find the best model if 3.1-flash-lite-preview isn't accepted
-    let modelId = "gemini-1.5-flash"
-    try {
-      const modelsResp = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${GEMINI_API_KEY}`)
-      const modelsData = await modelsResp.json()
-      if (modelsData.models) {
-        const bestModel = modelsData.models.find((m: any) => m.name.includes("3.1") && m.name.includes("flash") && m.name.includes("lite"))
-                       || modelsData.models.find((m: any) => m.name.includes("3.1") && m.name.includes("flash"))
-                       || modelsData.models.find((m: any) => m.name.includes("2.0") && m.name.includes("flash"))
-        if (bestModel) {
-          modelId = bestModel.name.split('/').pop()
-          console.log("Auto-discovered best model:", modelId)
-        }
-      }
-    } catch (e) {
-      console.warn("Model discovery failed, falling back to 1.5-flash", e)
-    }
+    const modelId = "gemini-3.1-flash-lite-preview"
+    console.log("Auto-discovered best model:", modelId)
 
     const geminiEndpoint = `https://generativelanguage.googleapis.com/v1beta/models/${modelId}:generateContent?key=${GEMINI_API_KEY}`
 

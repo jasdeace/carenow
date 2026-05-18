@@ -11,8 +11,11 @@ import GiverDashboard from './pages/GiverDashboard'
 import BottomNav from './components/BottomNav'
 import Vitals from './pages/Vitals'
 import Medications from './pages/Medications'
-import LabResults from './pages/LabResults'
+import AIHub from './pages/AIHub'
 import Profile from './pages/Profile'
+import PrivacyPolicy from './pages/legal/PrivacyPolicy'
+import TermsOfService from './pages/legal/TermsOfService'
+import SensitiveInfoPolicy from './pages/legal/SensitiveInfoPolicy'
 
 function ProtectedRoute({ children, requireProfile = true }: { children: React.ReactNode, requireProfile?: boolean }) {
   const { user, profile, isLoading } = useAuthStore()
@@ -28,8 +31,14 @@ function ProtectedRoute({ children, requireProfile = true }: { children: React.R
 
 function AppLayout() {
   return (
-    <div className="pb-16">
-      <Outlet />
+    <div className="h-full flex flex-col bg-background">
+      {/* Fixed top safe area */}
+      <div className="shrink-0 bg-secondary/20" style={{ height: 'env(safe-area-inset-top, 0px)' }} />
+      {/* Scrollable content */}
+      <div className="flex-1 overflow-y-auto overflow-x-hidden overscroll-none" style={{ WebkitOverflowScrolling: 'touch' } as React.CSSProperties}>
+        <Outlet />
+      </div>
+      {/* Bottom nav sits at the bottom of the flex container, never scrolls */}
       <BottomNav />
     </div>
   )
@@ -60,12 +69,15 @@ function App() {
         <Route path="/login" element={<Login />} />
         <Route path="/signup" element={<Signup />} />
         <Route path="/onboarding" element={<ProtectedRoute requireProfile={false}><Onboarding /></ProtectedRoute>} />
+        <Route path="/privacy" element={<PrivacyPolicy />} />
+        <Route path="/terms" element={<TermsOfService />} />
+        <Route path="/sensitive-info" element={<SensitiveInfoPolicy />} />
         
         <Route element={<ProtectedRoute requireProfile={true}><AppLayout /></ProtectedRoute>}>
           <Route path="/" element={<UnifiedHome />} />
           <Route path="/vitals" element={<Vitals />} />
           <Route path="/medications" element={<Medications />} />
-          <Route path="/labs" element={<LabResults />} />
+          <Route path="/ai" element={<AIHub />} />
           <Route path="/profile" element={<Profile />} />
         </Route>
         <Route path="/giver/dashboard/:takerId" element={<ProtectedRoute requireProfile={true}><GiverDashboard /></ProtectedRoute>} />

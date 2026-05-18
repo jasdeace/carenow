@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">CareNow</string>
+    <string name="title_activity_main">CareNow</string>
+    <string name="package_name">com.jasdeace.carenow</string>
+    <string name="custom_url_scheme">com.jasdeace.carenow</string>
+</resources>

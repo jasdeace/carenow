@@ -5,13 +5,15 @@ import { api } from '../lib/api'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Label } from '@/components/ui/label'
-import { HeartPulse, Droplets, Scale, Minus, Plus, Trash2 } from 'lucide-react'
+import { Badge } from '@/components/ui/badge'
+import { HeartPulse, Droplets, Scale, Minus, Plus, Trash2, Check, Pill } from 'lucide-react'
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts'
 import { format } from 'date-fns'
 
 export default function Vitals() {
   const { t } = useTranslation()
-  const { profile } = useAuthStore()
+  const user = useAuthStore(s => s.user)
+  
   
   const [loading, setLoading] = useState(false)
   const [successMsg, setSuccessMsg] = useState('')
@@ -25,6 +27,9 @@ export default function Vitals() {
   const showBP = localStorage.getItem('vitals_show_bp') !== 'false'
   const showGlucose = localStorage.getItem('vitals_show_glucose') !== 'false'
   const showWeight = localStorage.getItem('vitals_show_weight') !== 'false'
+
+  // Weekly medication adherence
+  const [weeklyProgress, setWeeklyProgress] = useState<any[]>([])
 
   // BP State
   const [sys, setSys] = useState('120')
@@ -45,18 +50,29 @@ export default function Vitals() {
   const [weightRaw, setWeightRaw] = useState<any[]>([])
 
   useEffect(() => {
-    if (profile?.loved_one_id) {
+    if (user?.id) {
       loadHistory()
+      loadWeeklyAdherence()
     }
-  }, [profile?.loved_one_id])
+  }, [user?.id])
+
+  const loadWeeklyAdherence = async () => {
+    if (!user?.id) return
+    try {
+      const data = await api.getWeeklyAdherence(user?.id)
+      setWeeklyProgress(data || [])
+    } catch (e) {
+      console.error('Failed to load weekly adherence:', e)
+    }
+  }
 
   const loadHistory = async () => {
-    if (!profile?.loved_one_id) return
+    if (!user?.id) return
     try {
       const [bp, gluc, wgt] = await Promise.all([
-        api.getVitalsBP(profile.loved_one_id),
-        api.getVitalsGlucose(profile.loved_one_id),
-        api.getVitalsWeight(profile.loved_one_id)
+        api.getVitalsBP(user?.id),
+        api.getVitalsGlucose(user?.id),
+        api.getVitalsWeight(user?.id)
       ])
 
       if (bp && bp.length > 0) {
@@ -108,10 +124,10 @@ export default function Vitals() {
 
   const handleBPSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!profile?.loved_one_id) return
+    if (!user?.id) return
     setLoading(true)
     try {
-      await api.logVitalBP(profile.loved_one_id, Number(sys), Number(dia), pulse ? Number(pulse) : undefined)
+      await api.logVitalBP(user?.id, Number(sys), Number(dia), pulse ? Number(pulse) : undefined)
       showSuccess('혈압이 기록되었습니다.')
       loadHistory()
     } catch (err) {
@@ -123,10 +139,10 @@ export default function Vitals() {
 
   const handleGlucoseSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!profile?.loved_one_id) return
+    if (!user?.id) return
     setLoading(true)
     try {
-      await api.logVitalGlucose(profile.loved_one_id, Number(glucose), glucoseTiming)
+      await api.logVitalGlucose(user?.id, Number(glucose), glucoseTiming)
       showSuccess('혈당이 기록되었습니다.')
       loadHistory()
     } catch (err) {
@@ -138,10 +154,10 @@ export default function Vitals() {
 
   const handleWeightSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!profile?.loved_one_id) return
+    if (!user?.id) return
     setLoading(true)
     try {
-      await api.logVitalWeight(profile.loved_one_id, Number(weight))
+      await api.logVitalWeight(user?.id, Number(weight))
       showSuccess('체중이 기록되었습니다.')
       loadHistory()
     } catch (err) {
@@ -178,20 +194,64 @@ export default function Vitals() {
   }
 
   // numpad input style
-  const numInputClass = "w-full h-16 text-2xl text-center bg-secondary/50 rounded-xl border-0 outline-none focus:ring-2 focus:ring-primary/50"
+  const numInputClass = "w-full h-14 text-xl text-center bg-secondary/50 rounded-xl border-0 outline-none focus:ring-2 focus:ring-primary/50"
+
+  const avgRate = weeklyProgress.length > 0 ? Math.round(weeklyProgress.reduce((sum, d) => sum + d.rate, 0) / weeklyProgress.length) : 0
 
   return (
-    <div className="flex flex-col min-h-screen bg-secondary/20 px-4 pt-8 pb-24 space-y-6 max-w-md mx-auto">
-      <div className="space-y-2">
-        <h1 className="text-3xl font-bold text-foreground">{t('vitals.title')}</h1>
-        <p className="text-lg text-muted-foreground">{t('vitals.subtitle')}</p>
+    <div className="flex flex-col bg-secondary/20 px-4 pt-6 pb-6 space-y-4 max-w-md mx-auto">
+      <div className="space-y-1">
+        <h1 className="text-2xl font-bold text-foreground">{t('vitals.title')}</h1>
+        <p className="text-sm text-muted-foreground">{t('vitals.subtitle')}</p>
       </div>
 
       {successMsg && (
-        <div className="bg-primary/20 text-primary border border-primary/50 p-4 rounded-xl text-center font-medium animate-in fade-in">
+        <div className="bg-primary/20 text-primary border border-primary/50 p-3 rounded-xl text-center text-sm font-medium animate-in fade-in">
           {successMsg}
         </div>
       )}
+
+      {/* Weekly Medication Adherence Card */}
+      <Card className="rounded-2xl shadow-md border-0 bg-background">
+        <CardHeader className="pb-2">
+          <CardTitle className="text-lg flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Pill className="text-primary w-5 h-5" />
+              주간 복용 기록
+            </div>
+            <Badge variant="secondary" className="text-sm px-2 py-0.5">
+              평균 {avgRate}%
+            </Badge>
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="flex justify-between items-center w-full py-2 px-1">
+            {weeklyProgress.map((entry: any, index: number) => {
+              const parts = entry.day.split(' ')
+              const dayName = parts[0]
+              const dateStr = parts[1] || ''
+              const isFull = entry.rate === 100
+              const isPartial = entry.rate > 0 && entry.rate < 100
+
+              return (
+                <div key={index} className="flex flex-col items-center gap-1.5">
+                  <span className="text-[10px] text-muted-foreground font-medium">{dayName}</span>
+                  <div className={`w-8 h-8 rounded-full flex items-center justify-center border-2 transition-all ${
+                    isFull ? 'bg-primary border-primary text-primary-foreground shadow-sm' : 
+                    isPartial ? 'bg-yellow-100 border-yellow-400 text-yellow-600' : 
+                    'bg-secondary/50 border-secondary text-muted-foreground'
+                  }`}>
+                    {isFull ? <Check className="w-4 h-4" /> : 
+                     isPartial ? <span className="text-[9px] font-bold">{entry.rate}%</span> : 
+                     <span className="text-xs font-medium">-</span>}
+                  </div>
+                  <span className="text-[9px] text-muted-foreground">{dateStr}</span>
+                </div>
+              )
+            })}
+          </div>
+        </CardContent>
+      </Card>
 
       {/* Blood Pressure Card */}
       {showBP && <Card className="rounded-2xl shadow-md border-0 bg-background overflow-hidden transition-all duration-300">

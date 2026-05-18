@@ -16,6 +16,8 @@ export default function Signup() {
   const [confirmPassword, setConfirmPassword] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [agreedTOS, setAgreedTOS] = useState(false)
+  const [agreedSensitive, setAgreedSensitive] = useState(false)
 
   const handleSignup = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -33,6 +35,10 @@ export default function Signup() {
     const normalized = normalizePhone(phone)
     if (!normalized || normalized.length < 10) {
       setError(t('auth.invalid_phone'))
+      return
+    }
+    if (!agreedTOS || !agreedSensitive) {
+      setError('모든 필수 동의 항목에 체크해 주세요.')
       return
     }
 
@@ -98,8 +104,37 @@ export default function Signup() {
                 className="h-14 text-lg"
               />
             </div>
+
+            <div className="space-y-3 pt-2">
+              <div className="flex items-start space-x-2">
+                <input 
+                  type="checkbox" 
+                  id="tos-agree" 
+                  checked={agreedTOS}
+                  onChange={(e) => setAgreedTOS(e.target.checked)}
+                  className="mt-1 h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary"
+                />
+                <label htmlFor="tos-agree" className="text-sm leading-tight text-muted-foreground">
+                  <Link to="/terms" className="text-primary underline">이용약관</Link> 및 <Link to="/privacy" className="text-primary underline">개인정보처리방침</Link>에 동의합니다. (필수)
+                </label>
+              </div>
+
+              <div className="flex items-start space-x-2">
+                <input 
+                  type="checkbox" 
+                  id="sensitive-agree" 
+                  checked={agreedSensitive}
+                  onChange={(e) => setAgreedSensitive(e.target.checked)}
+                  className="mt-1 h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary"
+                />
+                <label htmlFor="sensitive-agree" className="text-sm leading-tight text-muted-foreground">
+                  <Link to="/sensitive-info" className="text-primary underline">민감정보(건강정보) 수집 및 이용</Link>에 동의합니다. (필수)
+                </label>
+              </div>
+            </div>
+
             {error && <p className="text-sm text-destructive">{error}</p>}
-            <Button className="w-full text-lg h-12" type="submit" disabled={loading}>
+            <Button className="w-full text-lg h-12" type="submit" disabled={loading || !agreedTOS || !agreedSensitive}>
               {loading ? t('common.loading') : t('auth.signup_btn')}
             </Button>
           </form>

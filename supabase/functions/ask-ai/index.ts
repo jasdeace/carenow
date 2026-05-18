@@ -34,6 +34,8 @@ Please answer the user's question clearly, concisely, and in the language they u
     const contents = []
     if (history && Array.isArray(history)) {
       for (const msg of history) {
+        // Skip duplicate user message
+        if (msg.role === 'user' && msg.text === prompt) continue;
         // Skip the very first intro message if it's there, or just pass it all
         // The first intro is usually "무엇이든 물어보세요..."
         if (msg.role === 'ai' && msg.text.includes('무엇이든 물어보세요')) continue;

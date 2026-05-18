@@ -15,7 +15,8 @@ import { Pill, Plus, Camera, Loader2, Check, Trash2, Search, Info, Pencil } from
 export default function Medications() {
   const { t } = useTranslation()
   const { profile } = useAuthStore()
-  
+  const user = useAuthStore(s => s.user)
+
   const [meds, setMeds] = useState<any[]>([])
   const [pendingMeds, setPendingMeds] = useState<any[]>([])
   const [isAddOpen, setIsAddOpen] = useState(false)
@@ -42,15 +43,15 @@ export default function Medications() {
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
-    if (profile?.loved_one_id) loadMeds()
-  }, [profile?.loved_one_id])
+    if (user?.id) loadMeds()
+  }, [user?.id])
 
   const loadMeds = async () => {
-    if (!profile?.loved_one_id) return
+    if (!user?.id) return
     try {
       const [activeData, pendingData] = await Promise.all([
-        api.getMedications(profile.loved_one_id),
-        api.getPendingMedications(profile.loved_one_id)
+        api.getMedications(user?.id),
+        api.getPendingMedications(user?.id)
       ])
       setMeds(activeData || [])
       setPendingMeds(pendingData || [])
@@ -102,13 +103,13 @@ export default function Medications() {
 
   const handleManualAdd = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!profile?.loved_one_id) {
-      alert('Error: No active care profile found. If you are a caregiver, please add medications via the Giver Dashboard.');
+    if (!user?.id) {
+      alert('Error: No active user found.');
       return;
     }
     try {
       console.log('Attempting to save medication:', { medName, dosageAmt, dosageUnit, scheduleTimes });
-      await api.addMedication(profile.loved_one_id, medName, String(dosageAmt), dosageUnit, profile.id, scheduleTimes)
+      await api.addMedication(user.id, medName, String(dosageAmt), dosageUnit, user.id, scheduleTimes)
       setIsAddOpen(false)
       setMedName(''); setDosageAmt(''); setDosageUnit('mg'); setScheduleTimes(['09:00'])
       alert('새로운 약이 추가되었습니다.');
@@ -482,7 +483,7 @@ export default function Medications() {
       }}>
         <DialogContent className="w-11/12 rounded-2xl">
           <DialogHeader>
-            <DialogTitle className="text-2xl">{t('meds.edit_title') || '약 정보 수정'}</DialogTitle>
+            <DialogTitle className="text-2xl">수정하기</DialogTitle>
           </DialogHeader>
           <div className="space-y-6 pt-4">
             <form onSubmit={handleEditSubmit} className="space-y-4">

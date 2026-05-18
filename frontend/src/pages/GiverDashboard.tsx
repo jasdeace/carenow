@@ -13,14 +13,14 @@ import { Badge } from '@/components/ui/badge'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Separator } from '@/components/ui/separator'
 import { Button } from '@/components/ui/button'
-import { Activity, Pill, HeartPulse, CheckCircle2, Loader2, AlertCircle, ArrowLeft, Trash2, Check, UserMinus, Plus, Pencil } from 'lucide-react'
+import { Activity, Pill, HeartPulse, CheckCircle2, Loader2, AlertCircle, ArrowLeft, Trash2, Check, UserMinus, Plus, Pencil, Bell } from 'lucide-react'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 
 export default function GiverDashboard() {
   const { t, i18n } = useTranslation()
-  const { user } = useAuthStore()
+  const { user, profile } = useAuthStore()
   const { takerId } = useParams<{ takerId: string }>()
   const navigate = useNavigate()
   const [activeTab, setActiveTab] = useState('overview')
@@ -63,12 +63,20 @@ export default function GiverDashboard() {
       
       setIsAccepted(true)
 
+      // Use the taker's actual user_id for all data queries
+      const takerUserId = currentTaker.user_id
+      if (!takerUserId) {
+        console.error('Taker user_id not found')
+        setLoading(false)
+        return
+      }
+
       const [checkin, bpData, meds, adherence, pendingMeds] = await Promise.all([
-        api.getTodayCheckin(takerId),
-        api.getVitalsBP(takerId),
-        api.getTodayMedications(takerId),
-        api.getWeeklyAdherence(takerId),
-        api.getPendingMedications(takerId)
+        api.getTodayCheckin(takerUserId),
+        api.getVitalsBP(takerUserId),
+        api.getTodayMedications(takerUserId),
+        api.getWeeklyAdherence(takerUserId),
+        api.getPendingMedications(takerUserId)
       ])
 
       // Calculate meds taken today
@@ -94,6 +102,7 @@ export default function GiverDashboard() {
       // Sort activities newest first
       activities.sort((a, b) => b.time.getTime() - a.time.getTime())
 
+
       setDashboardData({
         checkinDone: !!checkin,
         medsTaken: takenMeds,
@@ -102,7 +111,8 @@ export default function GiverDashboard() {
         activities,
         adherence: adherence || [],
         medications: meds || [],
-        pendingMeds: pendingMeds || []
+        pendingMeds: pendingMeds || [],
+        takerUserId: takerUserId
       })
 
     } catch (e) {
@@ -129,7 +139,9 @@ export default function GiverDashboard() {
     const unit = (form.elements.namedItem('dosageUnit') as HTMLInputElement).value
     
     try {
-      await api.addMedication(takerId!, name, String(dosage), unit, user?.id || '', addScheduleTimes, false) // false = pending, taker must accept
+      const takerUserId = dashboardData?.takerUserId
+      if (!takerUserId) throw new Error('Taker user_id not found')
+      await api.addMedication(takerUserId, name, String(dosage), unit, user?.id || '', addScheduleTimes, false) // false = pending, taker must accept
       form.reset()
       setAddScheduleTimes(['09:00'])
       await fetchDashboardData() // Refresh
@@ -184,6 +196,58 @@ export default function GiverDashboard() {
       setAddScheduleTimes(next)
     }
   }
+
+  const handleNudge = async () => {
+    const takerUserId = dashboardData?.takerUserId;
+    
+    if (!takerUserId) {
+      alert('대상자의 정보를 찾을 수 없습니다.');
+      return;
+    }
+
+    try {
+      const res = await api.sendNudgeNotification(takerUserId, '', profile?.name_ko || '보호자');
+      if (res.success) {
+        alert('약 복용 알림을 보냈습니다.');
+      } else {
+        alert(res.message || '알림 전송 실패');
+      }
+    } catch (err: any) {
+      console.error(err);
+      if (err.status === 429) {
+        alert('한 시간에 한 번만 재촉할 수 있습니다.');
+      } else {
+        alert(`알림 전송 실패: ${err.message || 'Unknown error'}`);
+      }
+    }
+  }
+
+  const getMissedMedsCount = () => {
+    if (!dashboardData?.medications) return 0;
+    
+    const now = new Date();
+    const seoulTime = new Date(now.toLocaleString("en-US", {timeZone: "Asia/Seoul"}));
+    const currentHour = seoulTime.getHours();
+    const currentMinute = seoulTime.getMinutes();
+    const todayStr = new Date().toDateString();
+    
+    return dashboardData.medications.filter((med: any) => 
+      med.is_active && med.medication_schedules?.some((s: any) => {
+        const [schedHour, schedMin] = s.time_of_day.split(':').map(Number);
+        const isPast = (currentHour > schedHour) || (currentHour === schedHour && currentMinute > schedMin);
+        
+        const isTaken = med.medication_logs?.some((l: any) => 
+          l.status === 'taken' && 
+          (l.scheduled_at?.substring(11, 16) === s.time_of_day?.substring(0, 5) || !l.scheduled_at) &&
+          new Date(l.taken_at).toDateString() === todayStr
+        );
+        
+        return isPast && !isTaken;
+      })
+    ).length;
+  };
+
+  const missedCount = getMissedMedsCount();
 
   const [filterType, setFilterType] = useState<string | null>(null)
 
@@ -313,6 +377,17 @@ export default function GiverDashboard() {
                   </CardContent>
                 </Card>
               </div>
+
+              {/* Large Nudge Button */}
+              {missedCount > 0 && (
+                <Button 
+                  onClick={handleNudge}
+                  className="w-full h-16 rounded-2xl bg-orange-500 hover:bg-orange-600 text-white font-bold text-lg shadow-lg shadow-orange-500/20 gap-3 animate-pulse"
+                >
+                  <Bell className="w-6 h-6" />
+                  약 복용 재촉하기 ({missedCount}개 지연됨)
+                </Button>
+              )}
 
               {/* Weekly Adherence Chart */}
               <Card className="overflow-hidden border-0 shadow-sm">
@@ -486,11 +561,24 @@ export default function GiverDashboard() {
                             </div>
                           </div>
                           <div className="flex flex-wrap gap-1 mt-1 pl-8">
-                            {med.medication_schedules?.map((s: any, idx: number) => (
-                              <Badge key={idx} variant="outline" className="text-[8px] px-1 py-0 h-4 bg-background">
-                                {s.time_of_day?.substring(0, 5)}
-                              </Badge>
-                            ))}
+                            {med.medication_schedules?.map((s: any, idx: number) => {
+                              const isTaken = med.medication_logs?.some((l: any) => 
+                                l.status === 'taken' && 
+                                l.scheduled_at?.substring(11, 16) === s.time_of_day?.substring(0, 5) &&
+                                new Date(l.taken_at).toDateString() === new Date().toDateString()
+                              ) || med.medication_logs?.some((l: any) => 
+                                l.status === 'taken' && 
+                                !l.scheduled_at && 
+                                new Date(l.taken_at).toDateString() === new Date().toDateString()
+                              );
+
+                              return (
+                                <Badge key={idx} variant="outline" className={`text-[8px] px-1 py-0 h-4 ${isTaken ? 'bg-primary/20 border-primary/30 text-primary' : 'bg-background'}`}>
+                                  {s.time_of_day?.substring(0, 5)}
+                                  {isTaken && ' ✓'}
+                                </Badge>
+                              )
+                            })}
                           </div>
                         </div>
                       ))

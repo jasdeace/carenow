@@ -30,6 +30,7 @@ export default function TakerHome() {
   const [weeklyProgress, setWeeklyProgress] = useState<any[]>([])
   const [latestBP, setLatestBP] = useState<any>(null)
   const [currentTime, setCurrentTime] = useState(new Date())
+  const [selectedDate, setSelectedDate] = useState(new Date())
 
   // Viewers state
   const [viewers, setViewers] = useState<any[]>([])
@@ -50,13 +51,13 @@ export default function TakerHome() {
   }, [])
 
   useEffect(() => {
-    if (profile?.loved_one_id) {
+    if (user?.id) {
       loadDashboardData()
     }
     if (profile?.id) {
       loadViewers()
     }
-  }, [profile?.loved_one_id, profile?.id])
+  }, [user?.id, profile?.id])
 
   const loadViewers = async () => {
     if (!profile?.id) return
@@ -72,13 +73,13 @@ export default function TakerHome() {
   }
 
   const loadDashboardData = async () => {
-    if (!profile?.loved_one_id) return
+    if (!user?.id) return
     try {
       const [medsData, checkinData, progressData, bpData] = await Promise.all([
-        api.getTodayMedications(profile.loved_one_id),
-        api.getTodayCheckin(profile.loved_one_id),
-        api.getWeeklyAdherence(profile.loved_one_id),
-        api.getVitalsBP(profile.loved_one_id)
+        api.getTodayMedications(user.id),
+        api.getTodayCheckin(user.id),
+        api.getWeeklyAdherence(user.id),
+        api.getVitalsBP(user.id)
       ])
       setMeds(medsData || [])
       setHasCheckedIn(!!checkinData)
@@ -89,22 +90,21 @@ export default function TakerHome() {
     }
   }
 
-  // Helper: check if a specific dose (medication + time) was taken today
-  const isDoseTakenToday = (med: any, timeStr: string) => {
-    const today = new Date().toDateString()
-    // Find logs for this med today that roughly match the scheduled time (within the same day)
-    // For MVP, we just check if there's a log with a scheduled_at matching this time today
+  // Helper: check if a specific dose (medication + time) was taken on the selected date
+  const isDoseTakenOnDate = (med: any, timeStr: string, date: Date) => {
+    const dateString = date.toDateString()
     return med.medication_logs?.some((l: any) => {
       if (l.status !== 'taken') return false
-      const logDate = new Date(l.taken_at).toDateString()
-      if (logDate !== today) return false
       
-      // If the log has a scheduled_at, check if the hour matches
       if (l.scheduled_at) {
-        const schedTime = new Date(l.scheduled_at).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })
+        const schedDateObj = new Date(l.scheduled_at)
+        if (schedDateObj.toDateString() !== dateString) return false
+        
+        const schedTime = schedDateObj.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })
         return schedTime === timeStr.substring(0, 5)
+      } else {
+        return new Date(l.taken_at).toDateString() === dateString
       }
-      return true // Fallback
     }) || false
   }
 
@@ -115,19 +115,29 @@ export default function TakerHome() {
       ...med,
       schedule_id: s.id,
       display_time: s.time_of_day?.substring(0, 5) || '09:00',
-      is_taken: isDoseTakenToday(med, s.time_of_day || '09:00')
+      is_taken: isDoseTakenOnDate(med, s.time_of_day || '09:00', selectedDate)
     }))
   }).sort((a, b) => a.display_time.localeCompare(b.display_time))
 
+
+
+
   const handleTakeMed = async (med: any) => {
+    const [hours, minutes] = med.display_time.split(':')
+    const scheduledAt = new Date(selectedDate)
+    scheduledAt.setHours(parseInt(hours), parseInt(minutes), 0, 0)
+    
+    // Override taken_at with scheduled time so it aligns nicely historically
+    const takenAtOverride = scheduledAt.toISOString()
+
     // Optimistic UI update
     setMeds(prevMeds => prevMeds.map(m => {
       if (m.id === med.id) {
         const newLog = { 
           id: Math.random().toString(), 
           status: 'taken', 
-          taken_at: new Date().toISOString(),
-          scheduled_at: new Date(new Date().setHours(parseInt(med.display_time.split(':')[0]), parseInt(med.display_time.split(':')[1]), 0, 0)).toISOString()
+          taken_at: takenAtOverride,
+          scheduled_at: scheduledAt.toISOString()
         }
         return { ...m, medication_logs: [...(m.medication_logs || []), newLog] }
       }
@@ -135,12 +145,10 @@ export default function TakerHome() {
     }))
 
     try {
-      // For MVP, scheduledAt is just today at the display_time
-      const [hours, minutes] = med.display_time.split(':')
-      const scheduledAt = new Date()
-      scheduledAt.setHours(parseInt(hours), parseInt(minutes), 0, 0)
+      await api.takeMedication(med.id, scheduledAt.toISOString(), takenAtOverride)
       
-      await api.takeMedication(med.id, scheduledAt.toISOString())
+      // Backend handles missed reminders now.
+      
       loadDashboardData()
     } catch (error) {
       console.error(error)
@@ -149,11 +157,14 @@ export default function TakerHome() {
   }
 
   const handleUndoMed = async (med: any) => {
-    const today = new Date().toDateString()
+    const dateString = selectedDate.toDateString()
     const log = med.medication_logs?.find((l: any) => {
-      const logDate = new Date(l.taken_at).toDateString()
-      const schedTime = l.scheduled_at ? new Date(l.scheduled_at).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }) : null
-      return logDate === today && (schedTime === med.display_time || !schedTime)
+      if (l.scheduled_at) {
+        const schedDateObj = new Date(l.scheduled_at)
+        return schedDateObj.toDateString() === dateString && schedDateObj.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }) === med.display_time
+      } else {
+        return new Date(l.taken_at).toDateString() === dateString
+      }
     })
 
     if (!log) return
@@ -176,10 +187,10 @@ export default function TakerHome() {
   }
 
   const handleCheckin = async () => {
-    if (profile?.loved_one_id) {
+    if (user?.id) {
       setHasCheckedIn(true)
       try {
-        await api.submitDailyCheckin(profile.loved_one_id, 5) // 5 = excellent mood
+        await api.submitDailyCheckin(user.id, 5) // 5 = excellent mood
       } catch (e) {
         console.error(e)
       }
@@ -188,11 +199,11 @@ export default function TakerHome() {
 
   const handleBPSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!profile?.loved_one_id || !sys || !dia) return
+    if (!user?.id || !sys || !dia) return
     setIsSubmittingBP(true)
     try {
-      await api.logVitalBP(profile.loved_one_id, Number(sys), Number(dia), pulse ? Number(pulse) : undefined)
-      const bpData = await api.getVitalsBP(profile.loved_one_id)
+      await api.logVitalBP(user.id, Number(sys), Number(dia), pulse ? Number(pulse) : undefined)
+      const bpData = await api.getVitalsBP(user.id)
       setLatestBP(bpData && bpData.length > 0 ? bpData[0] : null)
       setSys('')
       setDia('')
@@ -248,12 +259,12 @@ export default function TakerHome() {
   }
 
   return (
-    <div className="flex flex-col min-h-screen bg-secondary/20 pb-20 px-4 pt-8 space-y-6 max-w-md mx-auto">
+    <div className="flex flex-col bg-secondary/20 px-4 pt-6 pb-6 space-y-4 max-w-md mx-auto">
       
       {/* Header / Greeting */}
-      <div className="space-y-2">
-        <h1 className="text-3xl font-bold text-foreground">{getGreeting()}</h1>
-        <p className="text-xl text-muted-foreground">
+      <div className="space-y-1">
+        <h1 className="text-2xl font-bold text-foreground">{getGreeting()}</h1>
+        <p className="text-sm text-muted-foreground">
           {format(currentTime, 'PPP (EEEE)', { locale: dateLocale })}
         </p>
       </div>
@@ -261,7 +272,7 @@ export default function TakerHome() {
       {/* Daily Check-in */}
       <Button 
         variant={hasCheckedIn ? "secondary" : "default"}
-        className={`w-full h-24 text-2xl rounded-2xl shadow-lg transition-all ${
+        className={`w-full h-16 text-xl rounded-2xl shadow-lg transition-all ${
           hasCheckedIn ? 'opacity-80' : 'bg-primary hover:bg-primary/90'
         }`}
         onClick={handleCheckin}
@@ -274,7 +285,7 @@ export default function TakerHome() {
       <Card className="rounded-2xl shadow-md border-0 bg-background">
         <CardHeader className="pb-3">
           <CardTitle className="text-2xl flex items-center justify-between">
-            {t('home.meds_title')}
+            {selectedDate.toDateString() === new Date().toDateString() ? t('home.meds_title') : `${selectedDate.getMonth()+1}월 ${selectedDate.getDate()}일 복용 기록`}
             <Badge variant="secondary" className="text-lg px-3 py-1">
               {doseItems.filter(d => d.is_taken).length} / {doseItems.length}
             </Badge>
@@ -332,10 +343,16 @@ export default function TakerHome() {
               const isFull = entry.rate === 100
               const isPartial = entry.rate > 0 && entry.rate < 100
               
+              const entryDate = new Date()
+              entryDate.setDate(entryDate.getDate() - (6 - index))
+              const isSelected = selectedDate.toDateString() === entryDate.toDateString()
+
               return (
-                <div key={index} className="flex flex-col items-center gap-2">
-                  <span className="text-xs text-muted-foreground font-medium">{dayName}</span>
+                <div key={index} className="flex flex-col items-center gap-2 cursor-pointer" onClick={() => setSelectedDate(entryDate)}>
+                  <span className={`text-xs font-medium ${isSelected ? 'text-primary' : 'text-muted-foreground'}`}>{dayName}</span>
                   <div className={`w-10 h-10 rounded-full flex items-center justify-center border-2 transition-all ${
+                    isSelected ? 'ring-2 ring-primary ring-offset-2 ring-offset-secondary' : ''
+                  } ${
                     isFull ? 'bg-primary border-primary text-primary-foreground shadow-md' : 
                     isPartial ? 'bg-yellow-100 border-yellow-400 text-yellow-600' : 
                     'bg-secondary/50 border-secondary text-muted-foreground'
@@ -344,7 +361,7 @@ export default function TakerHome() {
                      isPartial ? <span className="text-xs font-bold">{entry.rate}%</span> : 
                      <span className="text-sm font-medium">-</span>}
                   </div>
-                  <span className="text-[10px] text-muted-foreground">{dateStr}</span>
+                  <span className={`text-[10px] ${isSelected ? 'text-primary font-bold' : 'text-muted-foreground'}`}>{dateStr}</span>
                 </div>
               )
             })}

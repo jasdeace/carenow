@@ -12,6 +12,8 @@ import { FileText, Plus, Camera, Loader2, Save, Trash2, MessageSquare, Send, Che
 export default function LabResults() {
   const { t } = useTranslation()
   const { profile } = useAuthStore()
+  const user = useAuthStore(s => s.user)
+  
   
   const [labs, setLabs] = useState<any[]>([])
   const [isUploadOpen, setIsUploadOpen] = useState(false)
@@ -29,8 +31,8 @@ export default function LabResults() {
   const chatScrollRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
-    if (profile?.loved_one_id) loadLabs()
-  }, [profile?.loved_one_id])
+    if (user?.id) loadLabs()
+  }, [user?.id])
 
   useEffect(() => {
     if (chatScrollRef.current) {
@@ -38,10 +40,21 @@ export default function LabResults() {
     }
   }, [chatHistory])
 
+  // Handle iOS keyboard: set --visual-vh CSS variable
+  useEffect(() => {
+    const updateVisualVh = () => {
+      const vh = window.visualViewport?.height || window.innerHeight
+      document.documentElement.style.setProperty('--visual-vh', `${vh * 0.85}px`)
+    }
+    updateVisualVh()
+    window.visualViewport?.addEventListener('resize', updateVisualVh)
+    return () => window.visualViewport?.removeEventListener('resize', updateVisualVh)
+  }, [chatLab])
+
   const loadLabs = async () => {
-    if (!profile?.loved_one_id) return
+    if (!user?.id) return
     try {
-      const data = await api.getLabResults(profile.loved_one_id)
+      const data = await api.getLabResults(user?.id)
       setLabs(data.map((d: any) => ({
         id: d.id,
         date: d.recorded_at,
@@ -128,7 +141,7 @@ export default function LabResults() {
   }
 
   const handleSaveLab = async () => {
-    if (!profile?.loved_one_id) return
+    if (!user?.id) return
     let parsedContent = null
     try {
       parsedContent = JSON.parse(ocrText)
@@ -145,7 +158,7 @@ export default function LabResults() {
     }
 
     try {
-      await api.saveLabResult(profile.loved_one_id, manualDate || reportDate, ocrText, parsedContent)
+      await api.saveLabResult(user?.id, manualDate || reportDate, ocrText, parsedContent)
       setIsUploadOpen(false)
       setOcrText('')
       setManualDate('')
@@ -177,6 +190,11 @@ export default function LabResults() {
 
   const handleAskAI = async () => {
     if (!chatInput.trim() || !chatLab) return
+    if (!user?.id) return
+    if ((profile?.tier !== 'premium') && (profile?.token_balance ?? 0) < 1) {
+      alert('토큰이 부족합니다. 프로필에서 토큰을 충전해주세요.')
+      return
+    }
     const userMsg = chatInput
     
     const newHistoryUser = [...chatHistory, { role: 'user', text: userMsg }] as any
@@ -188,6 +206,16 @@ export default function LabResults() {
       const reply = await api.askAI(userMsg, chatLab.parsedData || chatLab.content, newHistoryUser)
       const finalHistory = [...newHistoryUser, { role: 'ai', text: reply }] as any
       setChatHistory(finalHistory)
+      
+      // Deduct token
+      try {
+        await api.deductToken(user.id, 1, 'lab_consultation')
+        // Refresh profile to update token balance in UI
+        const { fetchProfile } = useAuthStore.getState()
+        fetchProfile(user.id)
+      } catch (tokenErr) {
+        console.warn('Token deduction failed:', tokenErr)
+      }
       
       // Update local state FIRST so history persists even if DB save fails
       setLabs(prev => prev.map(l => l.id === chatLab.id ? { ...l, chat_history: finalHistory } : l))
@@ -265,7 +293,7 @@ export default function LabResults() {
   }
 
   return (
-    <div className="flex flex-col min-h-screen bg-secondary/20 px-4 pt-8 space-y-6 max-w-md mx-auto">
+    <div className="flex flex-col bg-secondary/20 px-4 pt-6 pb-6 space-y-4 max-w-md mx-auto">
       <div className="flex justify-between items-center">
         <div>
           <h1 className="text-3xl font-bold text-foreground">{t('labs.title')}</h1>
@@ -466,7 +494,8 @@ export default function LabResults() {
       </div>
       
       <Dialog open={!!chatLab} onOpenChange={(open) => !open && setChatLab(null)}>
-        <DialogContent className="w-11/12 rounded-2xl max-h-[85vh] flex flex-col p-0 overflow-hidden">
+        <DialogContent className="w-11/12 rounded-2xl flex flex-col p-0 overflow-hidden"
+          style={{ maxHeight: 'calc(var(--visual-vh, 85vh))', transition: 'max-height 0.15s ease' }}>
           <DialogHeader className="p-4 border-b bg-secondary/10 shrink-0">
             <DialogTitle className="text-xl flex items-center gap-2">
               <MessageSquare className="w-5 h-5 text-primary" />
@@ -497,6 +526,12 @@ export default function LabResults() {
             <Textarea 
               value={chatInput} 
               onChange={e => setChatInput(e.target.value)} 
+              onFocus={() => {
+                // iOS keyboard: scroll chat to bottom after keyboard opens
+                setTimeout(() => {
+                  chatScrollRef.current?.scrollTo({ top: chatScrollRef.current.scrollHeight, behavior: 'smooth' })
+                }, 300)
+              }}
               onKeyDown={e => {
                 if (e.key === 'Enter' && !e.shiftKey) {
                   e.preventDefault()
@@ -515,3 +550,4 @@ export default function LabResults() {
     </div>
   )
 }
+

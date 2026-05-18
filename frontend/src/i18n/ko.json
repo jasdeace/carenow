@@ -146,7 +146,12 @@
     "vitals": "건강수치",
     "meds": "나의 약",
     "labs": "검사결과",
+    "nutrition": "식단",
     "profile": "프로필"
+  },
+  "ai": {
+    "diet_tab": "다이어트",
+    "labs_tab": "검사결과"
   },
   "vitals": {
     "title": "건강수치 기록",

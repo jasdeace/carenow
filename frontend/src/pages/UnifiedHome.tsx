@@ -4,6 +4,7 @@ import { useAuthStore } from '../stores/authStore'
 import TakerHome from './TakerHome'
 import GiverHome from './GiverHome'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { notificationService } from '../lib/notifications'
 
 export default function UnifiedHome() {
   const { t } = useTranslation()
@@ -17,8 +18,16 @@ export default function UnifiedHome() {
     }
   }, [profile?.role])
 
+  // Register for push notifications globally when profile is loaded
+  useEffect(() => {
+    if (profile?.id) {
+      console.log('UnifiedHome: profile.id available, initializing push...', profile.id);
+      notificationService.requestPermissionsAndRegister(profile.id);
+    }
+  }, [profile?.id]);
+
   return (
-    <div className="flex flex-col min-h-screen bg-secondary/10 pb-24">
+    <div className="flex flex-col bg-secondary/10 pb-6">
       <div className="bg-background pt-4 pb-2 px-4 flex flex-col items-center">
         <div className="flex items-center gap-2 mb-2">
           <img src="/carelink_logo.png" alt="CareLink Logo" className="w-8 h-8 rounded-lg shadow-sm" />

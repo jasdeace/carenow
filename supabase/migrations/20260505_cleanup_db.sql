@@ -64,13 +64,11 @@ WHERE NOT EXISTS (
 -- and f984dab6 (01099999999, never used) 
 DELETE FROM care_circle_members WHERE user_id IN (
   'b585c13f-4275-4d07-bee9-3028ab8c4146',
-  '06076682-973f-472c-bf3a-30ec69abcf74',
-  'f984dab6-fake-0000-0000-000000000000'
+  '06076682-973f-472c-bf3a-30ec69abcf74'
 );
 DELETE FROM loved_ones WHERE user_id IN (
   'b585c13f-4275-4d07-bee9-3028ab8c4146',
-  '06076682-973f-472c-bf3a-30ec69abcf74',
-  'f984dab6-fake-0000-0000-000000000000'
+  '06076682-973f-472c-bf3a-30ec69abcf74'
 );
 DELETE FROM users WHERE id IN (
   'b585c13f-4275-4d07-bee9-3028ab8c4146',

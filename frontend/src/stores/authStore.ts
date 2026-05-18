@@ -9,7 +9,7 @@ interface UserProfile {
   phone_kr: string | null
   role: 'loved_one' | 'caregiver' | 'primary' | 'viewer' | null
   tier: 'free' | 'premium'
-  loved_one_id: string | null  // The loved_ones table primary key (different from users.id)
+  token_balance: number
 }
 
 interface AuthState {
@@ -22,7 +22,7 @@ interface AuthState {
   signOut: () => Promise<void>
 }
 
-// Guard against concurrent fetchProfile calls (the race condition root cause)
+// Guard against concurrent fetchProfile calls
 let _fetchInProgress: Promise<void> | null = null
 
 export const useAuthStore = create<AuthState>((set) => ({
@@ -34,7 +34,6 @@ export const useAuthStore = create<AuthState>((set) => ({
   setProfile: (profile) => set({ profile }),
 
   fetchProfile: async (userId) => {
-    // If a fetch is already in progress for this user, wait for it instead of starting a new one
     if (_fetchInProgress) {
       await _fetchInProgress
       return
@@ -44,7 +43,7 @@ export const useAuthStore = create<AuthState>((set) => ({
       set({ isLoading: true })
       const { data, error } = await supabase
         .from('users')
-        .select('id, email, name_ko, phone_kr, role, tier')
+        .select('id, email, name_ko, phone_kr, role, tier, token_balance')
         .eq('id', userId)
         .single()
 
@@ -54,15 +53,7 @@ export const useAuthStore = create<AuthState>((set) => ({
         return
       }
 
-      // Resolve loved_one_id — just look it up, never auto-create here
-      const { data: loData } = await supabase
-        .from('loved_ones')
-        .select('id')
-        .eq('user_id', userId)
-        .limit(1)
-        .maybeSingle()
-
-      set({ profile: { ...data, loved_one_id: loData?.id || null } })
+      set({ profile: data })
       set({ isLoading: false })
     }
 

@@ -146,7 +146,12 @@
     "vitals": "Vitals",
     "meds": "Meds",
     "labs": "Labs",
+    "nutrition": "Diet",
     "profile": "Profile"
+  },
+  "ai": {
+    "diet_tab": "Diet",
+    "labs_tab": "Lab Results"
   },
   "vitals": {
     "title": "Record Vitals",

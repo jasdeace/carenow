@@ -15,11 +15,11 @@ export const cleanDrugName = (name: string): string => {
 
 export const api = {
   // Medications
-  getMedications: async (lovedOneId: string) => {
+  getMedications: async (userId: string) => {
     const { data, error } = await supabase
       .from('medications')
       .select('*, medication_schedules(*)')
-      .eq('loved_one_id', lovedOneId)
+      .eq('user_id', userId)
       .order('created_at', { ascending: false })
       
     if (error) throw error
@@ -34,29 +34,25 @@ export const api = {
     if (error) throw error
   },
 
-  getTodayMedications: async (lovedOneId: string) => {
-    // For MVP, we simply fetch active medications. 
-    // In production, this would join with medication_schedules and medication_logs
-    // to determine if they are due today and if they were taken.
+  getTodayMedications: async (userId: string) => {
     const { data, error } = await supabase
       .from('medications')
       .select('*, medication_schedules(*), medication_logs(*)')
-      .eq('loved_one_id', lovedOneId)
+      .eq('user_id', userId)
       .eq('is_active', true)
-      .eq('is_deleted', false)
       
     if (error) throw error
     return data
   },
 
-  addMedication: async (lovedOneId: string, name_ko: string, dosage_amount: string, dosage_unit: string, createdBy: string, scheduleTimes: string[] = ['09:00'], isActive: boolean = true) => {
-    console.log('API: addMedication payload:', { lovedOneId, name_ko, dosage_amount, dosage_unit, createdBy, scheduleTimes, isActive });
+  addMedication: async (userId: string, name_ko: string, dosage_amount: string, dosage_unit: string, createdBy: string, scheduleTimes: string[] = ['09:00'], isActive: boolean = true) => {
+    console.log('API: addMedication payload:', { userId, name_ko, dosage_amount, dosage_unit, createdBy, scheduleTimes, isActive });
     
     // 1. Insert Medication
     const { data: medData, error: medError } = await supabase
       .from('medications')
       .insert({
-        loved_one_id: lovedOneId,
+        user_id: userId,
         name_ko: cleanDrugName(name_ko),
         dosage_amount,
         dosage_unit,
@@ -98,8 +94,7 @@ export const api = {
       .update({
         name_ko: cleanDrugName(name_ko),
         dosage_amount,
-        dosage_unit,
-        updated_at: new Date().toISOString()
+        dosage_unit
       })
       .eq('id', medId)
 
@@ -148,18 +143,17 @@ export const api = {
     if (error) throw error
   },
 
-  getPendingMedications: async (lovedOneId: string) => {
+  getPendingMedications: async (userId: string) => {
     const { data, error } = await supabase
       .from('medications')
       .select('*')
-      .eq('loved_one_id', lovedOneId)
+      .eq('user_id', userId)
       .eq('is_active', false)
-      .eq('is_deleted', false)
     if (error) throw error
     return data
   },
 
-  getWeeklyAdherence: async (lovedOneId: string) => {
+  getWeeklyAdherence: async (userId: string) => {
     const koDays = ['일', '월', '화', '수', '목', '금', '토']
     
     const formatLabel = (d: Date) => {
@@ -171,9 +165,8 @@ export const api = {
     const { data: meds, error: medsError } = await supabase
       .from('medications')
       .select('id')
-      .eq('loved_one_id', lovedOneId)
+      .eq('user_id', userId)
       .eq('is_active', true)
-      .eq('is_deleted', false)
     
     if (medsError) throw medsError
     
@@ -240,37 +233,49 @@ export const api = {
   },
 
   // Check-ins
-  submitDailyCheckin: async (lovedOneId: string, moodScore: number) => {
+  submitDailyCheckin: async (userId: string, moodScore: number) => {
+    const today = format(new Date(), 'yyyy-MM-dd')
+    // Use upsert to prevent duplicate checkins for the same user+date
     const { error } = await supabase
       .from('daily_checkins')
-      .insert({
-        loved_one_id: lovedOneId,
-        checkin_date: format(new Date(), 'yyyy-MM-dd'),
+      .upsert({
+        user_id: userId,
+        checkin_date: today,
+        checked_in_at: new Date().toISOString(),
+        mood_score: moodScore
+      }, { onConflict: 'user_id,checkin_date', ignoreDuplicates: true })
+    if (error) {
+      // Fallback: if upsert fails (no unique constraint), just insert and ignore dupes
+      console.warn('Checkin upsert failed, trying insert:', error.message)
+      await supabase.from('daily_checkins').insert({
+        user_id: userId,
+        checkin_date: today,
         checked_in_at: new Date().toISOString(),
         mood_score: moodScore
       })
-    if (error) throw error
+    }
   },
 
-  getTodayCheckin: async (lovedOneId: string) => {
+  getTodayCheckin: async (userId: string) => {
     const today = format(new Date(), 'yyyy-MM-dd')
     const { data, error } = await supabase
       .from('daily_checkins')
       .select('*')
-      .eq('loved_one_id', lovedOneId)
+      .eq('user_id', userId)
       .eq('checkin_date', today)
-      .maybeSingle()
+      .order('created_at', { ascending: false })
+      .limit(1)
       
     if (error) throw error
-    return data
+    return data && data.length > 0 ? data[0] : null
   },
 
   // Vitals
-  getVitalsBP: async (lovedOneId: string) => {
+  getVitalsBP: async (userId: string) => {
     const { data, error } = await supabase
       .from('vitals_blood_pressure')
       .select('*')
-      .eq('loved_one_id', lovedOneId)
+      .eq('user_id', userId)
       .order('measured_at', { ascending: false })
       .limit(30)
       
@@ -278,11 +283,11 @@ export const api = {
     return data
   },
 
-  logVitalBP: async (lovedOneId: string, systolic: number, diastolic: number, pulse?: number) => {
+  logVitalBP: async (userId: string, systolic: number, diastolic: number, pulse?: number) => {
     const { error } = await supabase
       .from('vitals_blood_pressure')
       .insert({
-        loved_one_id: lovedOneId,
+        user_id: userId,
         systolic,
         diastolic,
         pulse,
@@ -299,33 +304,33 @@ export const api = {
     if (error) throw error
   },
 
-  getVitalsGlucose: async (lovedOneId: string) => {
+  getVitalsGlucose: async (userId: string) => {
     const { data, error } = await supabase
       .from('vitals_glucose')
       .select('*')
-      .eq('loved_one_id', lovedOneId)
+      .eq('user_id', userId)
       .order('measured_at', { ascending: false })
       .limit(30)
     if (error) throw error
     return data
   },
 
-  getVitalsWeight: async (lovedOneId: string) => {
+  getVitalsWeight: async (userId: string) => {
     const { data, error } = await supabase
       .from('vitals_weight')
       .select('*')
-      .eq('loved_one_id', lovedOneId)
+      .eq('user_id', userId)
       .order('measured_at', { ascending: false })
       .limit(30)
     if (error) throw error
     return data
   },
 
-  logVitalGlucose: async (lovedOneId: string, glucoseLevel: number, timingContext: string) => {
+  logVitalGlucose: async (userId: string, glucoseLevel: number, timingContext: string) => {
     const { error } = await supabase
       .from('vitals_glucose')
       .insert({
-        loved_one_id: lovedOneId,
+        user_id: userId,
         value_mmol: glucoseLevel,
         measurement_timing: timingContext,
         measured_at: new Date().toISOString()
@@ -341,11 +346,11 @@ export const api = {
     if (error) throw error
   },
 
-  logVitalWeight: async (lovedOneId: string, weightKg: number) => {
+  logVitalWeight: async (userId: string, weightKg: number) => {
     const { error } = await supabase
       .from('vitals_weight')
       .insert({
-        loved_one_id: lovedOneId,
+        user_id: userId,
         weight_kg: weightKg,
         measured_at: new Date().toISOString()
       })
@@ -565,21 +570,21 @@ export const api = {
     if (error) throw error
   },
 
-  getLabResults: async (lovedOneId: string) => {
+  getLabResults: async (userId: string) => {
     const { data, error } = await supabase
       .from('lab_results')
       .select('*')
-      .eq('loved_one_id', lovedOneId)
+      .eq('user_id', userId)
       .order('recorded_at', { ascending: false })
     if (error) throw error
     return data || []
   },
 
-  saveLabResult: async (lovedOneId: string, recordedAt: string, rawContent: string, parsedData: any) => {
+  saveLabResult: async (userId: string, recordedAt: string, rawContent: string, parsedData: any) => {
     const { data, error } = await supabase
       .from('lab_results')
       .insert([{
-        loved_one_id: lovedOneId,
+        user_id: userId,
         recorded_at: recordedAt,
         raw_content: rawContent,
         parsed_data: parsedData
@@ -606,6 +611,14 @@ export const api = {
     return data.text
   },
 
+  deleteAccount: async (userId: string) => {
+    const { error } = await supabase
+      .from('users')
+      .delete()
+      .eq('id', userId)
+    if (error) throw error
+  },
+
   updateLabResultChat: async (id: string, chatHistory: any[]) => {
     const { error } = await supabase
       .from('lab_results')
@@ -621,4 +634,167 @@ export const api = {
     if (error) throw error
     return data
   },
+
+  sendNudgeNotification: async (takerUserId: string, medName: string, senderName: string) => {
+    const { data, error } = await supabase.functions.invoke('nudge-notification', {
+      body: { takerUserId, medName, senderName }
+    })
+    if (error) throw error
+    return data
+  },
+
+  // ============ TOKEN SYSTEM ============
+
+  deductToken: async (userId: string, amount: number, reason: string) => {
+    const { data, error } = await supabase.rpc('deduct_token', {
+      p_user_id: userId,
+      p_amount: amount,
+      p_reason: reason
+    })
+    if (error) throw error
+    return data // returns new balance
+  },
+
+  addTokens: async (userId: string, amount: number, reason: string) => {
+    const { data, error } = await supabase.rpc('add_tokens', {
+      p_user_id: userId,
+      p_amount: amount,
+      p_reason: reason
+    })
+    if (error) throw error
+    return data
+  },
+
+  getTokenHistory: async (userId: string) => {
+    const { data, error } = await supabase
+      .from('token_transactions')
+      .select('*')
+      .eq('user_id', userId)
+      .order('created_at', { ascending: false })
+      .limit(50)
+    if (error) throw error
+    return data || []
+  },
+
+  // ============ NUTRITRACK ============
+
+  getNutritionEntries: async (userId: string, date: string) => {
+    const { data, error } = await supabase
+      .from('nutrition_entries')
+      .select('*')
+      .eq('user_id', userId)
+      .eq('entry_date', date)
+      .order('created_at', { ascending: true })
+    if (error) throw error
+    return data || []
+  },
+
+  addNutritionEntry: async (entry: {
+    user_id: string, entry_date: string, entry_type: string,
+    meal_type?: string, description?: string, activity_name?: string,
+    duration_minutes?: number, calories: number, protein_g?: number,
+    carbs_g?: number, fat_g?: number, fiber_g?: number, ai_analysis?: any,
+    image_url?: string
+  }) => {
+    const { data, error } = await supabase
+      .from('nutrition_entries')
+      .insert(entry)
+      .select()
+      .single()
+    if (error) throw error
+    return data
+  },
+
+  updateNutritionEntry: async (id: string, updates: any) => {
+    const { error } = await supabase
+      .from('nutrition_entries')
+      .update({ ...updates, is_manually_edited: true })
+      .eq('id', id)
+    if (error) throw error
+  },
+
+  deleteNutritionEntry: async (id: string) => {
+    const { error } = await supabase
+      .from('nutrition_entries')
+      .delete()
+      .eq('id', id)
+    if (error) throw error
+  },
+
+  getWeeklyNutrition: async (userId: string) => {
+    const dates: string[] = []
+    for (let i = 6; i >= 0; i--) {
+      const d = new Date()
+      d.setDate(d.getDate() - i)
+      dates.push(d.toLocaleDateString('en-CA'))
+    }
+
+    const { data, error } = await supabase
+      .from('nutrition_entries')
+      .select('*')
+      .eq('user_id', userId)
+      .gte('entry_date', dates[0])
+      .lte('entry_date', dates[6])
+      .order('entry_date', { ascending: true })
+
+    if (error) throw error
+
+    // Group by date
+    const byDate: Record<string, any[]> = {}
+    for (const d of dates) byDate[d] = []
+    for (const entry of (data || [])) {
+      if (byDate[entry.entry_date]) byDate[entry.entry_date].push(entry)
+    }
+
+    return dates.map(date => {
+      const entries = byDate[date] || []
+      const caloriesIn = entries.filter((e: any) => e.entry_type === 'meal').reduce((s: number, e: any) => s + (e.calories || 0), 0)
+      const caloriesBurned = entries.filter((e: any) => e.entry_type === 'activity').reduce((s: number, e: any) => s + Math.abs(e.calories || 0), 0)
+      const protein = entries.filter((e: any) => e.entry_type === 'meal').reduce((s: number, e: any) => s + Number(e.protein_g || 0), 0)
+      const carbs = entries.filter((e: any) => e.entry_type === 'meal').reduce((s: number, e: any) => s + Number(e.carbs_g || 0), 0)
+      const fat = entries.filter((e: any) => e.entry_type === 'meal').reduce((s: number, e: any) => s + Number(e.fat_g || 0), 0)
+      return { date, caloriesIn, caloriesBurned, net: caloriesIn - caloriesBurned, protein, carbs, fat, entryCount: entries.length }
+    })
+  },
+
+  analyzeMealPhoto: async (imageBase64: string, userText?: string) => {
+    const { data, error } = await supabase.functions.invoke('analyze-meal', {
+      body: { imageBase64, userText }
+    })
+    if (error) throw error
+    if (data?.error) throw new Error(data.error)
+    return data
+  },
+
+  nutritionChat: async (userId: string, message: string, todayEntries: any[], dailySummary: any, chatHistory: any[]) => {
+    const { data, error } = await supabase.functions.invoke('nutrition-chat', {
+      body: { userId, message, todayEntries, dailySummary, chatHistory }
+    })
+    if (error) throw error
+    return data
+  },
+
+  getNutritionChat: async (userId: string, date: string) => {
+    const { data, error } = await supabase
+      .from('nutrition_chat')
+      .select('*')
+      .eq('user_id', userId)
+      .eq('chat_date', date)
+      .maybeSingle()
+    if (error) throw error
+    return data
+  },
+
+  saveNutritionChat: async (userId: string, date: string, messages: any[]) => {
+    const { error } = await supabase
+      .from('nutrition_chat')
+      .upsert({
+        user_id: userId,
+        chat_date: date,
+        messages: messages,
+        updated_at: new Date().toISOString()
+      }, { onConflict: 'user_id,chat_date' })
+    if (error) throw error
+  },
 }
+
