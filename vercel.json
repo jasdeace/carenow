@@ -1,6 +1,6 @@
 {
-  "buildCommand": "cd frontend && npm install --include=dev && npm run build",
-  "outputDirectory": "frontend/dist",
+  "buildCommand": "cd mobile && npm install && npx expo export --platform web",
+  "outputDirectory": "mobile/dist",
   "installCommand": "echo 'skipping root install — see buildCommand'",
   "rewrites": [
     { "source": "/(.*)", "destination": "/index.html" }
