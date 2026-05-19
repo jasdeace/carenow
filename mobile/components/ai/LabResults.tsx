@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -79,6 +79,7 @@ export function LabResults() {
 
   const [kbHeight, setKbHeight] = useState(0);
   const [uploadOpen, setUploadOpen] = useState(false);
+  const chatScrollRef = useRef<ScrollView>(null);
 
   // Measure the keyboard so the chat can sit exactly above it
   useEffect(() => {
@@ -95,6 +96,13 @@ export function LabResults() {
       h.remove();
     };
   }, [chatLab]);
+
+  // When the keyboard opens it shrinks the chat panel — scroll to the latest
+  // message so the user sees it without scrolling by hand.
+  useEffect(() => {
+    if (chatLab) chatScrollRef.current?.scrollToEnd({ animated: true });
+  }, [kbHeight, chatLab]);
+
   const [ocrLoading, setOcrLoading] = useState(false);
   const [scanned, setScanned] = useState<any>(null);
   const [labDate, setLabDate] = useState('');
@@ -321,7 +329,12 @@ export function LabResults() {
               </Pressable>
             </View>
 
-            <ScrollView className="flex-1" contentContainerClassName="p-4 gap-3">
+            <ScrollView
+              ref={chatScrollRef}
+              className="flex-1"
+              contentContainerClassName="p-4 gap-3"
+              onContentSizeChange={() => chatScrollRef.current?.scrollToEnd({ animated: true })}
+            >
               {chatHistory.map((m, i) => (
                 <View
                   key={i}

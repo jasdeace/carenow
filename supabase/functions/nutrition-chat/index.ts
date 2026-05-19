@@ -11,24 +11,116 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 }
 
+const seoulDate = (d: Date) => d.toLocaleDateString('en-CA', { timeZone: 'Asia/Seoul' })
+const isDate = (s: any) => typeof s === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(s)
+
+// Execute user-confirmed actions. entry_date lets the user log meals/activities
+// for a past day ("어제 점심에..."); it defaults to today when absent/invalid.
+async function executeActions(supabase: any, userId: string, actions: any[]) {
+  const today = seoulDate(new Date())
+  const executed: any[] = []
+
+  let goalRow: any = null
+  if (actions.some((a) => a?.type === 'set_goal')) {
+    const { data } = await supabase
+      .from('nutrition_goals').select('*').eq('user_id', userId).maybeSingle()
+    goalRow = data
+  }
+
+  for (const action of actions) {
+    try {
+      if (action.type === 'set_goal') {
+        const { data, error } = await supabase
+          .from('nutrition_goals')
+          .upsert({
+            user_id: userId,
+            goal_type: action.goal_type ?? goalRow?.goal_type ?? null,
+            daily_calorie_goal:
+              action.daily_calorie_goal ?? goalRow?.daily_calorie_goal ?? 2000,
+            daily_protein_goal: action.daily_protein_goal ?? goalRow?.daily_protein_goal ?? null,
+            notes: action.notes ?? goalRow?.notes ?? null,
+            updated_at: new Date().toISOString(),
+          })
+          .select()
+          .single()
+        if (!error) executed.push({ type: 'set_goal', success: true, goal: data })
+        else console.error('Failed to set goal:', error)
+      } else if (action.type === 'add_meal') {
+        const { data, error } = await supabase
+          .from('nutrition_entries')
+          .insert({
+            user_id: userId,
+            entry_date: isDate(action.entry_date) ? action.entry_date : today,
+            entry_type: 'meal',
+            meal_type: action.meal_type,
+            description: action.description,
+            calories: action.calories,
+            protein_g: action.protein_g,
+            carbs_g: action.carbs_g,
+            fat_g: action.fat_g,
+          })
+          .select()
+          .single()
+        if (!error) executed.push({ type: 'add_meal', success: true, entry: data })
+        else console.error('Failed to add meal:', error)
+      } else if (action.type === 'add_activity') {
+        const { data, error } = await supabase
+          .from('nutrition_entries')
+          .insert({
+            user_id: userId,
+            entry_date: isDate(action.entry_date) ? action.entry_date : today,
+            entry_type: 'activity',
+            activity_name: action.activity_name,
+            duration_minutes: action.duration_minutes,
+            calories: -Math.abs(action.calories || 0),
+          })
+          .select()
+          .single()
+        if (!error) executed.push({ type: 'add_activity', success: true, entry: data })
+        else console.error('Failed to add activity:', error)
+      } else if (action.type === 'delete_entry' && action.id) {
+        const { error } = await supabase
+          .from('nutrition_entries')
+          .delete()
+          .eq('id', action.id)
+        if (!error) executed.push({ type: 'delete_entry', success: true, id: action.id })
+      }
+    } catch (actionError) {
+      console.error('Action execution error:', actionError)
+    }
+  }
+  return executed
+}
+
 serve(async (req: Request) => {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders })
   }
 
   try {
-    const { userId, message, todayEntries, dailySummary, chatHistory } = await req.json()
-
-    if (!userId || !message) {
-      throw new Error("Missing userId or message")
-    }
-
-    const GEMINI_API_KEY = Deno.env.get('GEMINI_API_KEY')
-    if (!GEMINI_API_KEY) throw new Error("GEMINI_API_KEY is not set")
+    const body = await req.json()
+    const { userId } = body
+    if (!userId) throw new Error("Missing userId")
 
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!
     const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
     const supabase = createClient(supabaseUrl, supabaseServiceKey)
+
+    // ── APPLY MODE — execute the actions the user confirmed; no AI call ──
+    if (Array.isArray(body.applyActions)) {
+      const actions = await executeActions(supabase, userId, body.applyActions)
+      return new Response(JSON.stringify({ actions }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        status: 200,
+      })
+    }
+
+    // ── CHAT MODE — AI proposes a reply + actions; nothing is saved here ──
+    const { message, todayEntries, dailySummary, chatHistory } = body
+    if (!message) throw new Error("Missing message")
+
+    const GEMINI_API_KEY = Deno.env.get('GEMINI_API_KEY')
+    if (!GEMINI_API_KEY) throw new Error("GEMINI_API_KEY is not set")
 
     // Current nutrition goal (if any)
     const { data: goalRow } = await supabase
@@ -46,6 +138,11 @@ serve(async (req: Request) => {
       .limit(1)
     const bodyRow = bodyRows?.[0] || null
 
+    const today = seoulDate(new Date())
+    const yd = new Date()
+    yd.setDate(yd.getDate() - 1)
+    const yesterday = seoulDate(yd)
+
     const contextStr = JSON.stringify({
       today_entries: todayEntries || [],
       daily_summary: dailySummary || {},
@@ -56,6 +153,8 @@ serve(async (req: Request) => {
     const systemInstruction = `You are a professional nutrition and fitness coach AI for the CareNow app.
 You help users with diet AND exercise: tracking what they eat and do, setting realistic
 daily calorie/protein goals, and giving personalised coaching advice.
+
+TODAY is ${today} (Asia/Seoul). Yesterday was ${yesterday}.
 
 CURRENT CONTEXT:
 ${contextStr}
@@ -76,9 +175,18 @@ YOUR JOB:
 
 ACTIONS — include an "actions" array in your JSON response:
 - { "type": "set_goal", "goal_type": "lose|maintain|gain", "daily_calorie_goal": number, "daily_protein_goal": number, "notes": "the user's goal in their words" }
-- { "type": "add_meal", "meal_type": "breakfast|lunch|dinner|snack", "description": "name", "calories": number, "protein_g": number, "carbs_g": number, "fat_g": number }
-- { "type": "add_activity", "activity_name": "name", "duration_minutes": number, "calories": number (positive) }
+- { "type": "add_meal", "meal_type": "breakfast|lunch|dinner|snack", "description": "name", "calories": number, "protein_g": number, "carbs_g": number, "fat_g": number, "entry_date": "YYYY-MM-DD (optional)" }
+- { "type": "add_activity", "activity_name": "name", "duration_minutes": number, "calories": number (positive), "entry_date": "YYYY-MM-DD (optional)" }
 - { "type": "delete_entry", "id": "entry_uuid" }
+
+CONFIRMATION FLOW — the actions you return are NOT saved immediately. The app shows
+the user a confirmation card listing them and the user taps 확인 to apply. So your
+"reply" must DESCRIBE what you are about to log and ASK the user to confirm — never
+claim it is already saved. e.g. "점심으로 김치찌개(약 520kcal)를 기록할까요?"
+
+DATES — add_meal and add_activity may include an optional "entry_date" (YYYY-MM-DD).
+If the user refers to a past day (어제 → ${yesterday}, 그저께, a specific date), set
+entry_date to that day. Omit it when the user means today.
 
 RESPONSE FORMAT — return ONLY this JSON, no markdown:
 {
@@ -135,75 +243,9 @@ RULES:
       result = { reply: text, actions: [] }
     }
 
-    const today = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Seoul' })
-    const executedActions: any[] = []
-
-    for (const action of (result.actions || [])) {
-      try {
-        if (action.type === 'set_goal') {
-          const { data, error } = await supabase
-            .from('nutrition_goals')
-            .upsert({
-              user_id: userId,
-              goal_type: action.goal_type ?? goalRow?.goal_type ?? null,
-              daily_calorie_goal:
-                action.daily_calorie_goal ?? goalRow?.daily_calorie_goal ?? 2000,
-              daily_protein_goal: action.daily_protein_goal ?? goalRow?.daily_protein_goal ?? null,
-              notes: action.notes ?? goalRow?.notes ?? null,
-              updated_at: new Date().toISOString(),
-            })
-            .select()
-            .single()
-          if (!error) executedActions.push({ type: 'set_goal', success: true, goal: data })
-          else console.error('Failed to set goal:', error)
-        } else if (action.type === 'add_meal') {
-          const { data, error } = await supabase
-            .from('nutrition_entries')
-            .insert({
-              user_id: userId,
-              entry_date: today,
-              entry_type: 'meal',
-              meal_type: action.meal_type,
-              description: action.description,
-              calories: action.calories,
-              protein_g: action.protein_g,
-              carbs_g: action.carbs_g,
-              fat_g: action.fat_g,
-            })
-            .select()
-            .single()
-          if (!error) executedActions.push({ type: 'add_meal', success: true, entry: data })
-          else console.error('Failed to add meal:', error)
-        } else if (action.type === 'add_activity') {
-          const { data, error } = await supabase
-            .from('nutrition_entries')
-            .insert({
-              user_id: userId,
-              entry_date: today,
-              entry_type: 'activity',
-              activity_name: action.activity_name,
-              duration_minutes: action.duration_minutes,
-              calories: -Math.abs(action.calories || 0),
-            })
-            .select()
-            .single()
-          if (!error) executedActions.push({ type: 'add_activity', success: true, entry: data })
-          else console.error('Failed to add activity:', error)
-        } else if (action.type === 'delete_entry' && action.id) {
-          const { error } = await supabase
-            .from('nutrition_entries')
-            .delete()
-            .eq('id', action.id)
-          if (!error) executedActions.push({ type: 'delete_entry', success: true, id: action.id })
-        }
-      } catch (actionError) {
-        console.error('Action execution error:', actionError)
-      }
-    }
-
     return new Response(JSON.stringify({
       reply: result.reply,
-      actions: executedActions,
+      pendingActions: Array.isArray(result.actions) ? result.actions : [],
     }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       status: 200,

@@ -768,7 +768,16 @@ export const api = {
       body: { userId, message, todayEntries, dailySummary, chatHistory }
     })
     if (error) throw error
-    return data
+    return data as { reply: string; pendingActions: any[] }
+  },
+
+  // Apply the actions the user confirmed in the chat — no AI, no token cost.
+  nutritionApplyActions: async (userId: string, actions: any[]) => {
+    const { data, error } = await supabase.functions.invoke('nutrition-chat', {
+      body: { userId, applyActions: actions }
+    })
+    if (error) throw error
+    return data as { actions: any[] }
   },
 
   getNutritionChat: async (userId: string, date: string) => {

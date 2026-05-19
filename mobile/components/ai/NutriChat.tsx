@@ -30,12 +30,39 @@ const GREETING: Msg = {
   text: '안녕하세요! 🍽️ 오늘 드신 음식이나 운동을 말씀해주세요. 예: "점심에 김치찌개 먹었어"',
 };
 
+const MEAL_KO: Record<string, string> = {
+  breakfast: '아침',
+  lunch: '점심',
+  dinner: '저녁',
+  snack: '간식',
+};
+
+// A human-readable line for a proposed action, shown in the confirmation card.
+function describeAction(a: any, todayStr: string): string {
+  const datePrefix = a.entry_date && a.entry_date !== todayStr ? `[${a.entry_date}] ` : '';
+  if (a.type === 'add_meal')
+    return (
+      `${datePrefix}🍽 ${MEAL_KO[a.meal_type] ?? ''} · ${a.description} · ${a.calories}kcal` +
+      (a.protein_g ? ` (단백질 ${a.protein_g}g)` : '')
+    );
+  if (a.type === 'add_activity')
+    return `${datePrefix}🏃 ${a.activity_name} · ${a.duration_minutes ?? 0}분 · ${Math.abs(a.calories || 0)}kcal 소모`;
+  if (a.type === 'set_goal')
+    return (
+      `🎯 하루 목표 ${a.daily_calorie_goal}kcal` +
+      (a.daily_protein_goal ? ` · 단백질 ${a.daily_protein_goal}g` : '')
+    );
+  if (a.type === 'delete_entry') return '🗑 기록 삭제';
+  return JSON.stringify(a);
+}
+
 export function NutriChat({ todayEntries, dailySummary, onEntriesChanged }: Props) {
   const { user, profile, fetchProfile } = useAuthStore();
   const [expanded, setExpanded] = useState(false);
   const [input, setInput] = useState('');
   const [messages, setMessages] = useState<Msg[]>([GREETING]);
   const [loading, setLoading] = useState(false);
+  const [pending, setPending] = useState<any[] | null>(null);
   const [kbHeight, setKbHeight] = useState(0);
   const scrollRef = useRef<ScrollView>(null);
   const todayStr = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Seoul' });
@@ -67,7 +94,7 @@ export function NutriChat({ todayEntries, dailySummary, onEntriesChanged }: Prop
   }, [expanded]);
 
   const send = async () => {
-    if (!input.trim() || !user?.id || loading) return;
+    if (!input.trim() || !user?.id || loading || pending) return;
     if ((profile?.token_balance ?? 0) < 1) {
       Alert.alert('토큰 부족', '토큰이 부족합니다.');
       return;
@@ -83,12 +110,35 @@ export function NutriChat({ todayEntries, dailySummary, onEntriesChanged }: Prop
       setMessages(final);
       api.deductToken(user.id, 1, 'nutrition_chat').then(() => fetchProfile(user.id)).catch(() => {});
       api.saveNutritionChat(user.id, todayStr, final).catch(() => {});
-      if (result.actions?.length > 0) onEntriesChanged();
+      if (result.pendingActions?.length) setPending(result.pendingActions);
     } catch {
       setMessages((prev) => [...prev, { role: 'ai', text: '오류가 발생했습니다. 다시 시도해주세요.' }]);
     } finally {
       setLoading(false);
     }
+  };
+
+  // Apply the proposed actions only after the user taps 확인.
+  const confirmPending = async () => {
+    if (!pending || !user?.id || loading) return;
+    setLoading(true);
+    try {
+      await api.nutritionApplyActions(user.id, pending);
+      onEntriesChanged();
+      const done = [...messages, { role: 'ai' as const, text: '✅ 기록했습니다.' }];
+      setMessages(done);
+      api.saveNutritionChat(user.id, todayStr, done).catch(() => {});
+    } catch {
+      setMessages((prev) => [...prev, { role: 'ai', text: '저장 중 오류가 발생했습니다.' }]);
+    } finally {
+      setPending(null);
+      setLoading(false);
+    }
+  };
+
+  const cancelPending = () => {
+    setPending(null);
+    setMessages((prev) => [...prev, { role: 'ai', text: '기록을 취소했어요.' }]);
   };
 
   return (
@@ -158,6 +208,38 @@ export function NutriChat({ todayEntries, dailySummary, onEntriesChanged }: Prop
                 </View>
               ))}
               {loading && <ActivityIndicator size="small" color="#8b5cf6" />}
+
+              {/* Confirmation card — nothing is logged until the user taps 확인 */}
+              {pending && (
+                <View className="rounded-2xl border border-violet-300 bg-violet-50 p-3">
+                  <Text className="mb-2 text-xs font-semibold text-violet-700">
+                    아래 내용을 기록할까요?
+                  </Text>
+                  {pending.map((a, i) => (
+                    <Text key={i} className="mb-1 text-sm text-foreground">
+                      {describeAction(a, todayStr)}
+                    </Text>
+                  ))}
+                  <View className="mt-2 flex-row gap-2">
+                    <Pressable
+                      onPress={confirmPending}
+                      disabled={loading}
+                      className={`flex-1 items-center justify-center rounded-xl bg-primary py-2.5 ${
+                        loading ? 'opacity-50' : ''
+                      }`}
+                    >
+                      <Text className="font-semibold text-primary-foreground">확인</Text>
+                    </Pressable>
+                    <Pressable
+                      onPress={cancelPending}
+                      disabled={loading}
+                      className="flex-1 items-center justify-center rounded-xl bg-secondary py-2.5"
+                    >
+                      <Text className="font-semibold text-foreground">취소</Text>
+                    </Pressable>
+                  </View>
+                </View>
+              )}
             </ScrollView>
 
             <View className="flex-row items-center gap-2 border-t border-border p-3">
@@ -171,9 +253,9 @@ export function NutriChat({ todayEntries, dailySummary, onEntriesChanged }: Prop
               />
               <Pressable
                 onPress={send}
-                disabled={!input.trim() || loading}
+                disabled={!input.trim() || loading || !!pending}
                 className={`h-11 w-11 items-center justify-center rounded-full bg-primary ${
-                  !input.trim() || loading ? 'opacity-50' : ''
+                  !input.trim() || loading || pending ? 'opacity-50' : ''
                 }`}
               >
                 <Ionicons name="send" size={18} color="#ffffff" />

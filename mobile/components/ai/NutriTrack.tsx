@@ -56,6 +56,7 @@ export function NutriTrack() {
     goal_type: string | null;
     daily_calorie_goal: number;
   } | null>(null);
+  const [bodyComp, setBodyComp] = useState<any>(null);
 
   const dateStr = selectedDate.toLocaleDateString('en-CA', { timeZone: 'Asia/Seoul' });
   const todayStr = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Seoul' });
@@ -68,6 +69,10 @@ export function NutriTrack() {
   useEffect(() => {
     if (user?.id) {
       api.getWeeklyNutrition(user.id).then(setWeekly).catch(console.error);
+      api
+        .getBodyComposition(user.id)
+        .then((rows) => setBodyComp(rows?.[0] ?? null))
+        .catch(console.error);
       loadGoal();
     }
   }, [user?.id]);
@@ -190,6 +195,20 @@ export function NutriTrack() {
             </Text>
           </View>
         </View>
+
+        {/* Body composition — latest InBody record from the 건강수치 tab */}
+        {bodyComp && (
+          <View className="flex-row items-center gap-3 rounded-2xl bg-violet-50 p-4">
+            <Ionicons name="body" size={22} color="#8b5cf6" />
+            <View className="flex-1">
+              <Text className="text-[11px] text-muted-foreground">체성분 · 건강수치</Text>
+              <Text className="text-sm font-semibold text-foreground">
+                체중 {bodyComp.weight_kg}kg · 골격근 {bodyComp.skeletal_muscle_kg}kg · 체지방률{' '}
+                {bodyComp.body_fat_pct}%
+              </Text>
+            </View>
+          </View>
+        )}
 
         {/* Weekly */}
         <Pressable
