@@ -106,14 +106,18 @@ export default function Profile() {
     );
   };
 
-  const reasonLabel = (r: string) =>
-    ({
-      nutrition_chat: 'AI 영양사 채팅',
-      meal_analysis: '식단 사진 분석',
-      lab_consultation: '검사결과 상담',
-      signup_bonus: '가입 보너스',
-      admin_topup: '관리자 충전',
-    })[r] || r;
+  const reasonLabel = (r: string) => {
+    if (r?.startsWith('iap:')) return '토큰 구매';
+    return (
+      {
+        nutrition_chat: 'AI 영양사 채팅',
+        meal_analysis: '식단 사진 분석',
+        lab_consultation: '검사결과 상담',
+        signup_bonus: '가입 보너스',
+        admin_topup: '관리자 충전',
+      }[r] || r
+    );
+  };
 
   return (
     <SafeAreaView edges={['top']} className="flex-1 bg-secondary">
@@ -242,6 +246,28 @@ export default function Profile() {
                 trackColor={{ true: '#16a34a' }}
               />
             </View>
+          ))}
+        </View>
+
+        {/* Legal */}
+        <View className="overflow-hidden rounded-2xl bg-background">
+          {(
+            [
+              { label: '이용약관', path: '/legal/terms' },
+              { label: '개인정보처리방침', path: '/legal/privacy' },
+              { label: '민감정보 수집 및 이용 동의', path: '/legal/sensitive' },
+            ] as const
+          ).map((item, i) => (
+            <Pressable
+              key={item.path}
+              onPress={() => router.push(item.path)}
+              className={`flex-row items-center justify-between p-4 ${
+                i > 0 ? 'border-t border-border' : ''
+              }`}
+            >
+              <Text className="text-base text-foreground">{item.label}</Text>
+              <Ionicons name="chevron-forward" size={18} color="#a1a1aa" />
+            </Pressable>
           ))}
         </View>
 

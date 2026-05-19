@@ -117,8 +117,20 @@ export default function Signup() {
             >
               <Checkbox checked={agreedTOS} />
               <Text className="flex-1 text-sm leading-tight text-muted-foreground">
-                <Text className="text-primary">이용약관</Text> 및{' '}
-                <Text className="text-primary">개인정보처리방침</Text>에 동의합니다. (필수)
+                <Text
+                  className="text-primary underline"
+                  onPress={() => router.push('/legal/terms')}
+                >
+                  이용약관
+                </Text>{' '}
+                및{' '}
+                <Text
+                  className="text-primary underline"
+                  onPress={() => router.push('/legal/privacy')}
+                >
+                  개인정보처리방침
+                </Text>
+                에 동의합니다. (필수)
               </Text>
             </Pressable>
 
@@ -128,8 +140,13 @@ export default function Signup() {
             >
               <Checkbox checked={agreedSensitive} />
               <Text className="flex-1 text-sm leading-tight text-muted-foreground">
-                <Text className="text-primary">민감정보(건강정보) 수집 및 이용</Text>에 동의합니다.
-                (필수)
+                <Text
+                  className="text-primary underline"
+                  onPress={() => router.push('/legal/sensitive')}
+                >
+                  민감정보(건강정보) 수집 및 이용
+                </Text>
+                에 동의합니다. (필수)
               </Text>
             </Pressable>
 
