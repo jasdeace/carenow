@@ -1,5 +1,6 @@
 // @ts-ignore
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
+import { GEMINI_MODEL, geminiEndpoint as buildGeminiEndpoint } from "../_shared/gemini.ts"
 
 // @ts-ignore
 declare const Deno: any;
@@ -35,10 +36,9 @@ serve(async (req: Request) => {
       throw new Error("GEMINI_API_KEY is not set in Edge Function secrets")
     }
 
-    const modelId = "gemini-3.1-flash-lite-preview"
-    console.log("Auto-discovered best model:", modelId)
+    console.log("Auto-discovered best model:", GEMINI_MODEL)
 
-    const geminiEndpoint = `https://generativelanguage.googleapis.com/v1beta/models/${modelId}:generateContent?key=${GEMINI_API_KEY}`
+    const geminiEndpoint = buildGeminiEndpoint(GEMINI_API_KEY)
 
     const prompt = `
       You are a professional medical data extraction assistant. 

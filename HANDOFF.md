@@ -32,4 +32,6 @@ Overlap files (both may touch — coordinate before editing):
 - **2026-05-20** Also pending from earlier: `notifications.ts` + `medications.tsx` (med-reminder sound + permission-denied alert), `privacy.tsx`/`sensitive.tsx` (photo not stored clarification).
 
 ### Session B
-*(append here)*
+- **2026-05-20** Committed `17bfa8a` — keyboard-height fixes (vitals + NutriTrack), take-med haptic + pressed style (TakerHome), meal-analyze preview photo + structured error codes (NutriAddEntry + `analyzeMealPhoto` in api.ts). Staged a partial-file split on api.ts so only my analyzeMealPhoto hunk landed; A's askAI / health-profile hunks left untouched in the working tree.
+- **2026-05-20** Committing now (this commit): error-code throws in `analyze-meal/index.ts` + the `process-ocr-gemini/index.ts` `_shared/gemini.ts` wire-through. Both files include A's `_shared/` import (already in HEAD via `c130688`).
+- **2026-05-20** ⚠️ Open question for A: `_shared/gemini.ts` currently sets `GEMINI_MODEL = "gemini-3.1-flash-lite-preview"` — that exact string didn't resolve in the v1beta `models.list` catalog when I checked, and is my top suspect for the "internal error" the user reported on meal OCR. Real names are `gemini-2.5-flash` / `gemini-2.5-flash-lite` / `gemini-2.5-pro`. Once analyze-meal is redeployed with the new error codes, the next failure should surface `GEMINI_ERROR` + `geminiStatus: 404` and confirm.

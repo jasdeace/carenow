@@ -1,5 +1,6 @@
 // @ts-ignore
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
+import { GEMINI_MODEL, geminiEndpoint as buildGeminiEndpoint } from "../_shared/gemini.ts"
 
 // @ts-ignore
 declare const Deno: any;
@@ -16,17 +17,16 @@ serve(async (req: Request) => {
 
   try {
     const { imageBase64, userText } = await req.json()
-    
+
     if (!imageBase64) {
-      throw new Error("Missing image payload")
+      throw Object.assign(new Error("Missing image payload"), { code: 'MISSING_IMAGE' })
     }
 
     const GEMINI_API_KEY = Deno.env.get('GEMINI_API_KEY')
-    if (!GEMINI_API_KEY) throw new Error("GEMINI_API_KEY is not set")
+    if (!GEMINI_API_KEY) throw Object.assign(new Error("GEMINI_API_KEY is not set"), { code: 'MISSING_API_KEY' })
 
-    const modelId = "gemini-3.1-flash-lite-preview"
-    console.log("analyze-meal using model:", modelId)
-    const geminiEndpoint = `https://generativelanguage.googleapis.com/v1beta/models/${modelId}:generateContent?key=${GEMINI_API_KEY}`
+    console.log("analyze-meal using model:", GEMINI_MODEL)
+    const geminiEndpoint = buildGeminiEndpoint(GEMINI_API_KEY)
 
     const imagePart = {
       inline_data: {
@@ -79,18 +79,21 @@ Respond ONLY with a valid JSON object:
 
     if (!response.ok) {
       console.error("Gemini API Error:", JSON.stringify(geminiData))
-      throw new Error(geminiData.error?.message || "Failed to analyze meal")
+      throw Object.assign(
+        new Error(geminiData.error?.message || "Failed to analyze meal"),
+        { code: 'GEMINI_ERROR', geminiStatus: response.status },
+      )
     }
 
     let jsonString = geminiData.candidates?.[0]?.content?.parts?.[0]?.text || "{}"
     jsonString = jsonString.replace(/```json/gi, '').replace(/```/g, '').trim()
-    
+
     let result = null
     try {
       result = JSON.parse(jsonString)
     } catch (e) {
       console.error("Failed to parse Gemini JSON:", jsonString)
-      throw new Error("AI returned invalid response format")
+      throw Object.assign(new Error("AI returned invalid response format"), { code: 'INVALID_RESPONSE_FORMAT' })
     }
 
     return new Response(JSON.stringify({
@@ -102,10 +105,11 @@ Respond ONLY with a valid JSON object:
     })
 
   } catch(error) {
-    const err = error as Error;
-    console.error("analyze-meal error:", err.message)
-    return new Response(JSON.stringify({ error: err.message }), { 
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' }, 
+    const err = error as Error & { code?: string; geminiStatus?: number };
+    const code = err.code ?? 'UNKNOWN'
+    console.error(`analyze-meal error [${code}]:`, err.message)
+    return new Response(JSON.stringify({ error: err.message, code, geminiStatus: err.geminiStatus }), {
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       status: 200 // Return 200 so frontend can read the JSON error body
     })
   }
