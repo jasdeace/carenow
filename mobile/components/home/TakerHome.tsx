@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { View, Text, Pressable, ActivityIndicator, Alert, Linking } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import * as Haptics from 'expo-haptics';
 
 import { useAuthStore } from '@/stores/authStore';
 import { api } from '@/lib/api';
@@ -97,6 +98,7 @@ export function TakerHome() {
     .sort((a, b) => a.display_time.localeCompare(b.display_time));
 
   const takeMed = async (dose: Dose) => {
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     const [h, m] = dose.display_time.split(':');
     const at = new Date(today);
     at.setHours(parseInt(h), parseInt(m), 0, 0);
@@ -109,6 +111,7 @@ export function TakerHome() {
   };
 
   const undoMed = async (dose: Dose) => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     const ds = today.toDateString();
     const log = dose.medication_logs?.find((l: any) =>
       l.scheduled_at
@@ -264,6 +267,10 @@ export function TakerHome() {
                   className={`h-11 items-center justify-center rounded-xl ${
                     dose.is_taken ? 'border border-yellow-500/50 bg-yellow-50' : 'bg-primary'
                   }`}
+                  style={({ pressed }) => ({
+                    opacity: pressed ? 0.85 : 1,
+                    transform: [{ scale: pressed ? 0.97 : 1 }],
+                  })}
                 >
                   <Text
                     className={`text-base font-semibold ${

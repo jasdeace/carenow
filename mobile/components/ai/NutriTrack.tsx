@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { View, Text, Pressable, ScrollView, TextInput, Alert } from 'react-native';
+import { View, Text, Pressable, ScrollView, TextInput, Alert, Keyboard, Platform } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import Svg, { Circle } from 'react-native-svg';
 
@@ -57,6 +57,18 @@ export function NutriTrack() {
     daily_calorie_goal: number;
   } | null>(null);
   const [bodyComp, setBodyComp] = useState<any>(null);
+  const [kbHeight, setKbHeight] = useState(0);
+
+  useEffect(() => {
+    const showEvt = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
+    const hideEvt = Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide';
+    const showSub = Keyboard.addListener(showEvt, (e) => setKbHeight(e.endCoordinates.height));
+    const hideSub = Keyboard.addListener(hideEvt, () => setKbHeight(0));
+    return () => {
+      showSub.remove();
+      hideSub.remove();
+    };
+  }, []);
 
   const dateStr = selectedDate.toLocaleDateString('en-CA', { timeZone: 'Asia/Seoul' });
   const todayStr = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Seoul' });
@@ -144,7 +156,12 @@ export function NutriTrack() {
 
   return (
     <View className="flex-1">
-      <ScrollView contentContainerClassName="p-4 gap-4 pb-8">
+      <ScrollView
+        contentContainerClassName="p-4 gap-4"
+        contentContainerStyle={{ paddingBottom: 32 + kbHeight }}
+        automaticallyAdjustKeyboardInsets
+        keyboardShouldPersistTaps="handled"
+      >
         <View className="flex-row items-center justify-between">
           <Text className="text-2xl font-bold text-foreground">식단 관리</Text>
           <Pressable
@@ -295,7 +312,7 @@ export function NutriTrack() {
                   </Pressable>
                 </View>
               ) : (
-                <View className="flex-row items-center gap-2">
+                <View className="flex-row items-center gap-1">
                   <Text
                     className={`text-sm font-bold ${
                       entry.entry_type === 'activity' ? 'text-orange-500' : 'text-emerald-600'
@@ -309,11 +326,13 @@ export function NutriTrack() {
                       setEditingId(entry.id);
                       setEditCal(String(Math.abs(entry.calories)));
                     }}
+                    hitSlop={8}
+                    className="ml-1 p-2"
                   >
-                    <Ionicons name="pencil" size={14} color="#a1a1aa" />
+                    <Ionicons name="pencil" size={16} color="#a1a1aa" />
                   </Pressable>
-                  <Pressable onPress={() => removeEntry(entry.id)}>
-                    <Ionicons name="trash-outline" size={14} color="#ef4444" />
+                  <Pressable onPress={() => removeEntry(entry.id)} hitSlop={8} className="p-2">
+                    <Ionicons name="trash-outline" size={16} color="#ef4444" />
                   </Pressable>
                 </View>
               )}

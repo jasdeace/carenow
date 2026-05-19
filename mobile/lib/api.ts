@@ -758,8 +758,16 @@ export const api = {
     const { data, error } = await supabase.functions.invoke('analyze-meal', {
       body: { imageBase64, userText }
     })
-    if (error) throw error
-    if (data?.error) throw new Error(data.error)
+    // Supabase wraps non-2xx (incl. worker crashes -> 500 "Internal Server Error") in `error`.
+    if (error) {
+      throw Object.assign(error, { code: (error as any).code ?? 'EDGE_FN_HTTP' })
+    }
+    if (data?.error) {
+      throw Object.assign(new Error(data.error), {
+        code: data.code ?? 'UNKNOWN',
+        geminiStatus: data.geminiStatus,
+      })
+    }
     return data
   },
 

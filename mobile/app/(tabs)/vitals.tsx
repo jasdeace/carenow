@@ -1,5 +1,15 @@
 import { useEffect, useState } from 'react';
-import { View, Text, Pressable, ScrollView, TextInput, ActivityIndicator, Alert } from 'react-native';
+import {
+  View,
+  Text,
+  Pressable,
+  ScrollView,
+  TextInput,
+  ActivityIndicator,
+  Alert,
+  Keyboard,
+  Platform,
+} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTranslation } from 'react-i18next';
 import { Ionicons } from '@expo/vector-icons';
@@ -129,6 +139,18 @@ export default function Vitals() {
   const [glucoseVal, setGlucoseVal] = useState('100');
   const [timing, setTiming] = useState('fasting');
   const [weightVal, setWeightVal] = useState('60.0');
+  const [kbHeight, setKbHeight] = useState(0);
+
+  useEffect(() => {
+    const showEvt = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
+    const hideEvt = Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide';
+    const showSub = Keyboard.addListener(showEvt, (e) => setKbHeight(e.endCoordinates.height));
+    const hideSub = Keyboard.addListener(hideEvt, () => setKbHeight(0));
+    return () => {
+      showSub.remove();
+      hideSub.remove();
+    };
+  }, []);
 
   useEffect(() => {
     (async () => {
@@ -225,7 +247,8 @@ export default function Vitals() {
   return (
     <SafeAreaView edges={['top']} className="flex-1 bg-secondary">
       <ScrollView
-        contentContainerClassName="p-4 gap-4 pb-10"
+        contentContainerClassName="p-4 gap-4"
+        contentContainerStyle={{ paddingBottom: 40 + kbHeight }}
         automaticallyAdjustKeyboardInsets
         keyboardShouldPersistTaps="handled"
       >

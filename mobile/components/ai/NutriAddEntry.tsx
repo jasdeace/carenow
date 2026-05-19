@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { View, Text, Pressable, TextInput, ScrollView, StyleSheet, ActivityIndicator, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 
 import { useAuthStore } from '@/stores/authStore';
@@ -27,6 +28,7 @@ export function NutriAddEntry({ open, onClose, onAdded, dateStr }: Props) {
   const [tab, setTab] = useState<'photo' | 'manual' | 'activity'>('photo');
   const [loading, setLoading] = useState(false);
   const [aiResult, setAiResult] = useState<any>(null);
+  const [previewUri, setPreviewUri] = useState<string | null>(null);
 
   const [mealDesc, setMealDesc] = useState('');
   const [mealType, setMealType] = useState('lunch');
@@ -69,6 +71,7 @@ export function NutriAddEntry({ open, onClose, onAdded, dateStr }: Props) {
       return;
     }
     console.log('[meal] image picked ~', Math.round(b64.length / 1024), 'KB');
+    setPreviewUri(b64);
     setLoading(true);
     const t0 = Date.now();
     try {
@@ -96,10 +99,12 @@ export function NutriAddEntry({ open, onClose, onAdded, dateStr }: Props) {
         Alert.alert('분석 실패', '결과를 받지 못했습니다. 다시 시도해주세요.');
       }
     } catch (e: any) {
-      console.log('[meal] analyze-meal FAILED after', Date.now() - t0, 'ms:', e?.message, JSON.stringify(e)?.slice(0, 300));
-      Alert.alert('분석 실패', e?.message || '다시 시도해주세요');
+      const code = e?.code ?? 'UNKNOWN';
+      console.log('[meal] analyze-meal FAILED after', Date.now() - t0, 'ms:', code, e?.message, JSON.stringify(e)?.slice(0, 300));
+      Alert.alert('분석 실패', `${e?.message || '다시 시도해주세요'}\n\n[${code}]`);
     } finally {
       setLoading(false);
+      setPreviewUri(null);
     }
   };
 
@@ -202,9 +207,27 @@ export function NutriAddEntry({ open, onClose, onAdded, dateStr }: Props) {
           {tab === 'photo' && (
             <View className="gap-3 py-2">
               {loading ? (
-                <View className="items-center gap-3 py-12">
-                  <ActivityIndicator size="large" color="#16a34a" />
-                  <Text className="text-primary">AI가 음식을 분석하고 있습니다...</Text>
+                <View className="gap-3 py-2">
+                  {previewUri ? (
+                    <View className="relative overflow-hidden rounded-2xl bg-secondary">
+                      <Image
+                        source={{ uri: previewUri }}
+                        style={{ width: '100%', height: 260 }}
+                        contentFit="cover"
+                      />
+                      <View className="absolute inset-0 items-center justify-center gap-3 bg-black/45">
+                        <ActivityIndicator size="large" color="#ffffff" />
+                        <Text className="text-base font-medium text-white">
+                          AI가 음식을 분석하고 있습니다...
+                        </Text>
+                      </View>
+                    </View>
+                  ) : (
+                    <View className="items-center gap-3 py-12">
+                      <ActivityIndicator size="large" color="#16a34a" />
+                      <Text className="text-primary">AI가 음식을 분석하고 있습니다...</Text>
+                    </View>
+                  )}
                 </View>
               ) : (
                 <>
