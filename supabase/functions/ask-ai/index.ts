@@ -1,5 +1,8 @@
 // @ts-ignore
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
+// @ts-ignore
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.39.3'
+import { geminiEndpoint as buildGeminiEndpoint } from "../_shared/gemini.ts"
 
 // @ts-ignore
 declare const Deno: any;
@@ -15,8 +18,8 @@ serve(async (req: Request) => {
   }
 
   try {
-    const { prompt, context, history } = await req.json()
-    
+    const { prompt, context, history, userId } = await req.json()
+
     if (!prompt) {
       throw new Error("Missing prompt")
     }
@@ -24,20 +27,46 @@ serve(async (req: Request) => {
     const GEMINI_API_KEY = Deno.env.get('GEMINI_API_KEY')
     if (!GEMINI_API_KEY) throw new Error("GEMINI_API_KEY missing")
 
-    const geminiEndpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite-preview:generateContent?key=${GEMINI_API_KEY}`
+    // Fetch the user's persistent health snapshot if a userId was provided.
+    // It lets the lab AI personalise answers (e.g. relate this lab to overall
+    // trends) rather than reading the lab in isolation.
+    let healthProfile: any = null
+    if (userId) {
+      const supabase = createClient(
+        Deno.env.get('SUPABASE_URL')!,
+        Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,
+      )
+      const { data } = await supabase
+        .from('health_profile')
+        .select('highlights, risks, watch, next_actions, summary, updated_at')
+        .eq('user_id', userId)
+        .maybeSingle()
+      healthProfile = data
+    }
 
-    const systemInstruction = `You are a helpful medical assistant. You are given the following lab result context:
-${JSON.stringify(context, null, 2)}
+    const profileBlock = healthProfile
+      ? `\n\nRecent health snapshot (the user's overall pattern across meds, vitals, body composition, nutrition, labs):
+${JSON.stringify(healthProfile, null, 2)}
+Use this only when it makes the answer more useful — do not force-reference it.
+`
+      : ''
 
-Please answer the user's question clearly, concisely, and in the language they used (likely Korean). If the context doesn't have the answer, just say so.`
+    const systemInstruction = `You are a helpful medical assistant.
+
+Lab result context:
+${JSON.stringify(context, null, 2)}${profileBlock}
+Please answer the user's question clearly, concisely, and in Korean. If the context
+doesn't have the answer, just say so. Do not diagnose; offer observations and
+suggest consulting a doctor for medical decisions.`
+
+    const geminiEndpoint = buildGeminiEndpoint(GEMINI_API_KEY)
 
     const contents = []
     if (history && Array.isArray(history)) {
       for (const msg of history) {
         // Skip duplicate user message
         if (msg.role === 'user' && msg.text === prompt) continue;
-        // Skip the very first intro message if it's there, or just pass it all
-        // The first intro is usually "무엇이든 물어보세요..."
+        // Skip the canned intro line
         if (msg.role === 'ai' && msg.text.includes('무엇이든 물어보세요')) continue;
         contents.push({
           role: msg.role === 'ai' ? 'model' : 'user',
@@ -67,15 +96,15 @@ Please answer the user's question clearly, concisely, and in the language they u
 
     const text = geminiData.candidates?.[0]?.content?.parts?.[0]?.text || ""
 
-    return new Response(JSON.stringify({ text }), { 
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
+    return new Response(JSON.stringify({ text }), {
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' }
     })
 
   } catch(error) {
     const err = error as Error;
-    return new Response(JSON.stringify({ error: err.message }), { 
+    return new Response(JSON.stringify({ error: err.message }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      status: 400 
+      status: 400
     })
   }
 })

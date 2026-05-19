@@ -2,6 +2,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
 // @ts-ignore
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.39.3'
+import { geminiEndpoint as buildGeminiEndpoint } from "../_shared/gemini.ts"
 
 // @ts-ignore
 declare const Deno: any;
@@ -138,6 +139,14 @@ serve(async (req: Request) => {
       .limit(1)
     const bodyRow = bodyRows?.[0] || null
 
+    // Persistent AI health snapshot (overall pattern across all features).
+    // Lets the coach reference longer-term trends, not just today's numbers.
+    const { data: healthProfile } = await supabase
+      .from('health_profile')
+      .select('highlights, risks, watch, next_actions, summary, updated_at')
+      .eq('user_id', userId)
+      .maybeSingle()
+
     const today = seoulDate(new Date())
     const yd = new Date()
     yd.setDate(yd.getDate() - 1)
@@ -148,6 +157,7 @@ serve(async (req: Request) => {
       daily_summary: dailySummary || {},
       nutrition_goal: goalRow || { daily_calorie_goal: null, goal_type: null, notes: null },
       body_composition: bodyRow,
+      health_profile: healthProfile,
     }, null, 2)
 
     const systemInstruction = `You are a professional nutrition and fitness coach AI for the CareNow app.
@@ -202,7 +212,7 @@ RULES:
 - If the message needs no data change, return an empty actions array.
 - ALWAYS return valid JSON.`
 
-    const geminiEndpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite-preview:generateContent?key=${GEMINI_API_KEY}`
+    const geminiEndpoint = buildGeminiEndpoint(GEMINI_API_KEY)
 
     const contents: any[] = []
     if (chatHistory && Array.isArray(chatHistory)) {
