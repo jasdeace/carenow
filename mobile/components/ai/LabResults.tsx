@@ -206,7 +206,7 @@ export function LabResults() {
     setChatInput('');
     setChatting(true);
     try {
-      const reply = await api.askAI(userMsg, chatLab.parsedData || chatLab.content, next);
+      const reply = await api.askAI(userMsg, chatLab.parsedData || chatLab.content, next, user.id);
       const final: Msg[] = [...next, { role: 'ai', text: reply }];
       setChatHistory(final);
       api.deductToken(user.id, 1, 'lab_consultation').then(() => fetchProfile(user.id)).catch(() => {});

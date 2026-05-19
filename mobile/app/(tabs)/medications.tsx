@@ -9,6 +9,7 @@ import {
   StyleSheet,
   ActivityIndicator,
   Alert,
+  Linking,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTranslation } from 'react-i18next';
@@ -139,10 +140,15 @@ export default function Medications() {
     if (!user?.id || !form.name.trim() || !form.amount.trim()) return;
     setSaving(true);
     try {
+      let scheduleResult: 'ok' | 'denied' | 'unsupported' | 'error' = 'ok';
       if (editingId) {
         await api.updateMedication(editingId, form.name, form.amount, form.unit, form.times);
         await notificationService.cancelMedReminders(editingId);
-        await notificationService.scheduleMedReminders(editingId, form.name, form.times);
+        scheduleResult = await notificationService.scheduleMedReminders(
+          editingId,
+          form.name,
+          form.times,
+        );
       } else {
         const created: any = await api.addMedication(
           user.id,
@@ -153,10 +159,30 @@ export default function Medications() {
           form.times,
         );
         const newId = created?.id || created?.[0]?.id;
-        if (newId) await notificationService.scheduleMedReminders(newId, form.name, form.times);
+        if (newId)
+          scheduleResult = await notificationService.scheduleMedReminders(
+            newId,
+            form.name,
+            form.times,
+          );
       }
       setFormOpen(false);
       await load();
+
+      // Surface alarm-registration problems — silent failure here is the
+      // common reason users report "alarm is broken."
+      if (scheduleResult === 'denied') {
+        Alert.alert(
+          '알림 권한 필요',
+          '약 복용 알림을 받으려면 설정에서 CareNow의 알림을 허용해 주세요.',
+          [
+            { text: '닫기', style: 'cancel' },
+            { text: '설정 열기', onPress: () => Linking.openSettings() },
+          ],
+        );
+      } else if (scheduleResult === 'error') {
+        Alert.alert('알림 등록 실패', '약 복용 알림을 등록하지 못했습니다. 다시 시도해 주세요.');
+      }
     } catch (e: any) {
       Alert.alert('오류', e.message ?? '저장에 실패했습니다');
     } finally {

@@ -76,17 +76,27 @@ export const notificationService = {
     }
   },
 
-  async scheduleMedReminders(medId: string, medName: string, times: string[]) {
+  async scheduleMedReminders(
+    medId: string,
+    medName: string,
+    times: string[],
+  ): Promise<'ok' | 'denied' | 'unsupported' | 'error'> {
     const N = getNotifications();
-    if (!N) return;
+    if (!N) return 'unsupported';
+    if (!(await ensurePermission(N))) return 'denied';
     try {
-      if (!(await ensurePermission(N))) return;
       for (const time of times) {
         const [hour, minute] = time.split(':').map(Number);
         if (Number.isNaN(hour) || Number.isNaN(minute)) continue;
         await N.scheduleNotificationAsync({
           identifier: `med-${medId}-${time}`,
-          content: { title: '약 복용 시간', body: `${medName} 복용할 시간입니다.` },
+          content: {
+            title: '약 복용 시간',
+            body: `${medName} 복용할 시간입니다.`,
+            // Without this the notification fires silently — iOS won't play
+            // the alert sound for local notifications unless requested.
+            sound: 'default',
+          },
           trigger: {
             type: N.SchedulableTriggerInputTypes.DAILY,
             hour,
@@ -94,8 +104,10 @@ export const notificationService = {
           },
         });
       }
+      return 'ok';
     } catch (e) {
       console.error('Schedule reminders failed:', e);
+      return 'error';
     }
   },
 

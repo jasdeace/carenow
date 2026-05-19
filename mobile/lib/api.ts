@@ -600,9 +600,9 @@ export const api = {
     if (error) throw error
   },
 
-  askAI: async (prompt: string, context: any, history?: any[]) => {
+  askAI: async (prompt: string, context: any, history?: any[], userId?: string) => {
     const { data, error } = await supabase.functions.invoke('ask-ai', {
-      body: { prompt, context, history }
+      body: { prompt, context, history, userId }
     })
     if (error) throw error
     return data.text
@@ -860,6 +860,32 @@ export const api = {
     return data as
       | { goal_type: string | null; daily_calorie_goal: number; daily_protein_goal: number | null; notes: string | null }
       | null
+  },
+
+  // ============ HEALTH PROFILE (AI snapshot) ============
+  getHealthProfile: async (userId: string) => {
+    const { data, error } = await supabase
+      .from('health_profile')
+      .select('*')
+      .eq('user_id', userId)
+      .maybeSingle()
+    if (error) throw error
+    return data as {
+      highlights: string[]
+      risks: string[]
+      watch: string[]
+      next_actions: string[]
+      summary: string | null
+      updated_at: string
+    } | null
+  },
+
+  generateHealthProfile: async (userId: string) => {
+    const { data, error } = await supabase.functions.invoke('generate-health-profile', {
+      body: { userId },
+    })
+    if (error) throw error
+    return data
   },
 }
 

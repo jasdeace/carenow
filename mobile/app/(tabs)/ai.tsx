@@ -6,10 +6,13 @@ import { Ionicons } from '@expo/vector-icons';
 import { useAuthStore } from '@/stores/authStore';
 import { NutriTrack } from '@/components/ai/NutriTrack';
 import { LabResults } from '@/components/ai/LabResults';
+import { HealthReport } from '@/components/ai/HealthReport';
+
+type Tab = 'nutrition' | 'labs' | 'report';
 
 export default function AIHub() {
   const { profile } = useAuthStore();
-  const [tab, setTab] = useState<'nutrition' | 'labs'>('nutrition');
+  const [tab, setTab] = useState<Tab>('nutrition');
 
   return (
     <SafeAreaView edges={['top']} className="flex-1 bg-secondary">
@@ -31,15 +34,18 @@ export default function AIHub() {
       {/* Tabs */}
       <View className="bg-background px-4 pb-3 pt-2">
         <View className="flex-row rounded-xl bg-secondary p-1">
-          {[
-            { key: 'nutrition', label: '식단 관리' },
-            { key: 'labs', label: '검사결과' },
-          ].map((tabItem) => {
+          {(
+            [
+              { key: 'nutrition', label: '식단 관리' },
+              { key: 'labs', label: '검사결과' },
+              { key: 'report', label: '리포트' },
+            ] as const
+          ).map((tabItem) => {
             const active = tab === tabItem.key;
             return (
               <Pressable
                 key={tabItem.key}
-                onPress={() => setTab(tabItem.key as 'nutrition' | 'labs')}
+                onPress={() => setTab(tabItem.key)}
                 className={`flex-1 items-center rounded-lg py-2 ${active ? 'bg-background shadow-sm' : ''}`}
               >
                 <Text
@@ -53,7 +59,7 @@ export default function AIHub() {
         </View>
       </View>
 
-      {tab === 'nutrition' ? <NutriTrack /> : <LabResults />}
+      {tab === 'nutrition' ? <NutriTrack /> : tab === 'labs' ? <LabResults /> : <HealthReport />}
     </SafeAreaView>
   );
 }
