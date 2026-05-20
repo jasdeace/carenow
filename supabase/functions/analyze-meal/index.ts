@@ -99,7 +99,7 @@ Respond ONLY with a valid JSON object:
     return new Response(JSON.stringify({
       success: true,
       analysis: result,
-      modelUsed: modelId
+      modelUsed: GEMINI_MODEL
     }), { 
       headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
     })

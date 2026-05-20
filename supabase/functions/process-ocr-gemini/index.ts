@@ -90,7 +90,7 @@ serve(async (req: Request) => {
       console.error("Gemini Error:", geminiData)
       return new Response(JSON.stringify({ 
         error: geminiData.error?.message || "Failed to contact Gemini API",
-        debug: { modelUsed: modelId, status: response.status }
+        debug: { modelUsed: GEMINI_MODEL, status: response.status }
       }), { 
         headers: { ...corsHeaders, 'Content-Type': 'application/json' }, 
         status: 400 
@@ -112,9 +112,9 @@ serve(async (req: Request) => {
     return new Response(JSON.stringify({
       rawText: jsonString,
       structuredJson: structuredJson,
-      modelUsed: modelId
-    }), { 
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
+      modelUsed: GEMINI_MODEL
+    }), {
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' }
     })
 
   } catch(error) {
