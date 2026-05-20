@@ -19,6 +19,10 @@
     },
     "production": {
       "autoIncrement": true,
+      "distribution": "store",
+      "ios": {
+        "resourceClass": "m-medium"
+      },
       "env": {
         "EXPO_PUBLIC_SUPABASE_URL": "https://wmzochdgnujalmgnvmku.supabase.co",
         "EXPO_PUBLIC_SUPABASE_ANON_KEY": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Indtem9jaGRnbnVqYWxtZ252bWt1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzc2OTc1ODksImV4cCI6MjA5MzI3MzU4OX0.D4T9jlofOM7wqWZ0sf15jvFWom5L3jbACSDUn7MxkT0"
@@ -26,6 +30,12 @@
     }
   },
   "submit": {
-    "production": {}
+    "production": {
+      "ios": {
+        "appleId": "jasdeace1@gmail.com",
+        "appleTeamId": "6C6HPX3UCV",
+        "ascAppId": "PASTE_AFTER_CREATING_APP_IN_APP_STORE_CONNECT"
+      }
+    }
   }
 }

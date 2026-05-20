@@ -1,0 +1,13 @@
+<svg width="1024" height="1024" viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg">
+  <!-- Android adaptive-icon foreground: pill+heartbeat only, sized into the
+       inner safe zone (66% of canvas) so masking to circle/square doesn't crop. -->
+  <g transform="translate(512 512) scale(0.66) translate(-352 -144)">
+    <rect x="0" y="0" width="704" height="288" rx="144" fill="#FAF7F1" />
+    <path d="M352 0 H704 a144 144 0 0 1 144 144 v0 a144 144 0 0 1 -144 144 H352 Z"
+          fill="#E8927C" transform="translate(-144 0)" />
+    <rect x="336" y="0" width="32" height="288" fill="#0F2C2E" fill-opacity="0.10" />
+    <path d="M80 144 L208 144 L256 64 L320 224 L384 112 L448 144 L640 144"
+          fill="none" stroke="#0F2C2E" stroke-opacity="0.85" stroke-width="26"
+          stroke-linecap="round" stroke-linejoin="round" />
+  </g>
+</svg>

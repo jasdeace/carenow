@@ -1,5 +1,14 @@
 import { useEffect, useState } from 'react';
-import { View, Text, Pressable, ScrollView, TextInput, Switch, Alert, ActivityIndicator } from 'react-native';
+import {
+  View,
+  Text,
+  Pressable,
+  ScrollView,
+  TextInput,
+  Switch,
+  Alert,
+  ActivityIndicator,
+} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
@@ -10,12 +19,113 @@ import { useAuthStore } from '@/stores/authStore';
 import { supabase } from '@/lib/supabase';
 import { api } from '@/lib/api';
 import { normalizePhone, formatPhone } from '@/lib/phoneUtils';
+import { COLORS } from '@/constants/design';
 
 const VITAL_KEYS = [
   { key: 'vitals_show_bp', label: '혈압' },
   { key: 'vitals_show_glucose', label: '혈당' },
   { key: 'vitals_show_weight', label: '체중' },
 ] as const;
+
+const inputStyle = {
+  height: 46,
+  paddingHorizontal: 14,
+  backgroundColor: COLORS.cream[100],
+  borderRadius: 12,
+  fontSize: 15,
+  color: COLORS.ink[900],
+};
+
+function GroupTitle({ children }: { children: string }) {
+  return (
+    <Text
+      style={{
+        fontSize: 11.5,
+        fontWeight: '700',
+        color: COLORS.ink[500],
+        letterSpacing: 0.7,
+        textTransform: 'uppercase',
+        marginBottom: 8,
+        paddingHorizontal: 4,
+      }}
+    >
+      {children}
+    </Text>
+  );
+}
+
+function GroupCard({ children }: { children: React.ReactNode }) {
+  return (
+    <View
+      style={{
+        backgroundColor: COLORS.paper,
+        borderRadius: 16,
+        borderWidth: 1,
+        borderColor: COLORS.lineSoft,
+        overflow: 'hidden',
+        marginBottom: 14,
+      }}
+    >
+      {children}
+    </View>
+  );
+}
+
+function SettingRow({
+  icon,
+  iconColor,
+  label,
+  value,
+  right,
+  onPress,
+  showChevron,
+  showDivider,
+}: {
+  icon: keyof typeof Ionicons.glyphMap;
+  iconColor?: string;
+  label: string;
+  value?: string;
+  right?: React.ReactNode;
+  onPress?: () => void;
+  showChevron?: boolean;
+  showDivider?: boolean;
+}) {
+  const Inner = (
+    <View
+      style={{
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 12,
+        paddingHorizontal: 14,
+        paddingVertical: 13,
+        borderBottomWidth: showDivider ? 1 : 0,
+        borderBottomColor: COLORS.lineSoft,
+      }}
+    >
+      <View
+        style={{
+          width: 28,
+          height: 28,
+          borderRadius: 9,
+          backgroundColor: COLORS.cream[100],
+          alignItems: 'center',
+          justifyContent: 'center',
+        }}
+      >
+        <Ionicons name={icon} size={16} color={iconColor || COLORS.ink[700]} />
+      </View>
+      <Text style={{ flex: 1, fontSize: 14, fontWeight: '500', color: COLORS.ink[900] }}>
+        {label}
+      </Text>
+      {right}
+      {value && (
+        <Text style={{ fontSize: 12.5, color: COLORS.ink[500] }}>{value}</Text>
+      )}
+      {showChevron && <Ionicons name="chevron-forward" size={16} color={COLORS.ink[300]} />}
+    </View>
+  );
+  return onPress ? <Pressable onPress={onPress}>{Inner}</Pressable> : Inner;
+}
 
 export default function Profile() {
   const { t, i18n } = useTranslation();
@@ -52,7 +162,10 @@ export default function Profile() {
     setSavingPhone(true);
     try {
       const normalized = normalizePhone(phone);
-      const { error } = await supabase.from('users').update({ phone_kr: normalized }).eq('id', user.id);
+      const { error } = await supabase
+        .from('users')
+        .update({ phone_kr: normalized })
+        .eq('id', user.id);
       if (error) throw error;
       await fetchProfile(user.id);
       Alert.alert('저장됨', t('profile.phone_saved'));
@@ -122,54 +235,177 @@ export default function Profile() {
     );
   };
 
-  return (
-    <SafeAreaView edges={['top']} className="flex-1 bg-secondary">
-      <ScrollView contentContainerClassName="p-4 gap-4">
-        <Text className="text-2xl font-bold text-foreground">{t('profile.title')}</Text>
+  const initial = (profile?.name_ko || profile?.email || '?').trim().charAt(0);
 
-        {/* Token balance */}
-        <View className="overflow-hidden rounded-2xl bg-background">
-          <Pressable onPress={toggleHistory} className="flex-row items-center justify-between p-4">
-            <View className="flex-row items-center gap-3">
-              <View className="h-10 w-10 items-center justify-center rounded-full bg-violet-100">
-                <Ionicons name="sparkles" size={18} color="#8b5cf6" />
+  return (
+    <SafeAreaView edges={['top']} style={{ flex: 1, backgroundColor: COLORS.cream[50] }}>
+      <View
+        style={{
+          flexDirection: 'row',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          paddingHorizontal: 20,
+          paddingTop: 4,
+          paddingBottom: 8,
+        }}
+      >
+        <Text
+          style={{
+            fontSize: 26,
+            fontWeight: '700',
+            color: COLORS.ink[900],
+            letterSpacing: -0.6,
+          }}
+        >
+          {t('profile.title')}
+        </Text>
+      </View>
+
+      <ScrollView
+        contentContainerStyle={{ paddingHorizontal: 20, paddingTop: 12, paddingBottom: 32 }}
+        showsVerticalScrollIndicator={false}
+      >
+        {/* Profile card */}
+        <View
+          style={{
+            backgroundColor: COLORS.paper,
+            borderRadius: 22,
+            borderWidth: 1,
+            borderColor: COLORS.lineSoft,
+            paddingHorizontal: 20,
+            paddingVertical: 22,
+            alignItems: 'center',
+            marginBottom: 14,
+          }}
+        >
+          <View
+            style={{
+              width: 76,
+              height: 76,
+              borderRadius: 38,
+              backgroundColor: COLORS.teal[700],
+              alignItems: 'center',
+              justifyContent: 'center',
+              marginBottom: 12,
+            }}
+          >
+            <Text style={{ color: 'white', fontWeight: '600', fontSize: 32 }}>{initial}</Text>
+          </View>
+          <Text
+            style={{
+              fontSize: 22,
+              fontWeight: '700',
+              color: COLORS.ink[900],
+              marginBottom: 4,
+            }}
+          >
+            {profile?.name_ko || '사용자'}
+          </Text>
+          {profile?.email && (
+            <Text style={{ fontSize: 12.5, color: COLORS.ink[500] }}>{profile.email}</Text>
+          )}
+        </View>
+
+        {/* Token balance card */}
+        <GroupCard>
+          <Pressable
+            onPress={toggleHistory}
+            style={{
+              flexDirection: 'row',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              paddingHorizontal: 16,
+              paddingVertical: 14,
+            }}
+          >
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+              <View
+                style={{
+                  width: 36,
+                  height: 36,
+                  borderRadius: 12,
+                  backgroundColor: COLORS.coral[100],
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                }}
+              >
+                <Ionicons name="sparkles" size={18} color="#A85A45" />
               </View>
               <View>
-                <Text className="text-sm font-medium text-foreground">AI 토큰</Text>
-                <Text className="text-xs text-muted-foreground">식단 분석, 검사 상담에 사용</Text>
+                <Text style={{ fontSize: 14, fontWeight: '600', color: COLORS.ink[900] }}>
+                  AI 토큰
+                </Text>
+                <Text style={{ fontSize: 11.5, color: COLORS.ink[500], marginTop: 1 }}>
+                  식단 분석, 검사 상담에 사용
+                </Text>
               </View>
             </View>
-            <View className="flex-row items-center gap-1">
-              <Text className="text-2xl font-bold text-violet-600">
+            <View style={{ flexDirection: 'row', alignItems: 'baseline', gap: 4 }}>
+              <Text
+                style={{
+                  fontSize: 22,
+                  fontWeight: '700',
+                  color: '#A85A45',
+                  fontVariant: ['tabular-nums'],
+                }}
+              >
                 {profile?.token_balance ?? 0}
               </Text>
-              <Text className="text-sm text-muted-foreground">개</Text>
+              <Text style={{ fontSize: 12, color: COLORS.ink[500] }}>개</Text>
               <Ionicons
                 name={showHistory ? 'chevron-up' : 'chevron-down'}
-                size={16}
-                color="#a1a1aa"
+                size={14}
+                color={COLORS.ink[300]}
+                style={{ marginLeft: 4 }}
               />
             </View>
           </Pressable>
           {showHistory && (
-            <View className="border-t border-border px-4 pb-4 pt-2">
+            <View
+              style={{
+                borderTopWidth: 1,
+                borderTopColor: COLORS.lineSoft,
+                paddingHorizontal: 16,
+                paddingTop: 8,
+                paddingBottom: 14,
+              }}
+            >
               {historyLoading ? (
-                <ActivityIndicator color="#8b5cf6" className="py-3" />
+                <ActivityIndicator color="#A85A45" style={{ paddingVertical: 8 }} />
               ) : tokenHistory.length === 0 ? (
-                <Text className="py-3 text-center text-xs text-muted-foreground">
+                <Text
+                  style={{
+                    paddingVertical: 8,
+                    fontSize: 12,
+                    color: COLORS.ink[500],
+                    textAlign: 'center',
+                  }}
+                >
                   아직 사용 내역이 없습니다
                 </Text>
               ) : (
                 tokenHistory.map((tx) => (
                   <View
                     key={tx.id}
-                    className="flex-row items-center justify-between border-b border-border/50 py-2"
+                    style={{
+                      flexDirection: 'row',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      paddingVertical: 8,
+                      borderBottomWidth: 1,
+                      borderBottomColor: COLORS.lineSoft,
+                    }}
                   >
-                    <Text className="text-xs text-foreground">{reasonLabel(tx.reason)}</Text>
+                    <Text style={{ fontSize: 12.5, color: COLORS.ink[900] }}>
+                      {reasonLabel(tx.reason)}
+                    </Text>
                     <Text
-                      className={`text-sm font-bold ${
-                        tx.amount < 0 ? 'text-orange-500' : 'text-emerald-500'
-                      }`}
+                      style={{
+                        fontSize: 13,
+                        fontWeight: '700',
+                        color: tx.amount < 0 ? COLORS.coral[500] : COLORS.teal[700],
+                        fontVariant: ['tabular-nums'],
+                      }}
                     >
                       {tx.amount > 0 ? '+' : ''}
                       {tx.amount}
@@ -179,119 +415,219 @@ export default function Profile() {
               )}
             </View>
           )}
-        </View>
+        </GroupCard>
 
-        {/* My info */}
-        <View className="rounded-2xl bg-background p-4">
-          <View className="mb-3 flex-row items-center gap-2">
-            <Ionicons name="person" size={18} color="#16a34a" />
-            <Text className="text-lg font-bold text-foreground">{t('profile.my_info')}</Text>
-          </View>
-          <Text className="text-sm text-muted-foreground">{t('profile.name')}</Text>
-          <Text className="mb-3 text-base text-foreground">{profile?.name_ko || '-'}</Text>
-          <Text className="mb-1 text-sm text-muted-foreground">{t('profile.phone')}</Text>
-          <View className="flex-row gap-2">
-            <TextInput
-              value={phone}
-              onChangeText={(v) => setPhone(formatPhone(v))}
-              keyboardType="phone-pad"
-              placeholder="010-1234-5678"
-              placeholderTextColor="#a1a1aa"
-              className="h-12 flex-1 rounded-xl border border-border px-3 text-base text-foreground"
-            />
-            <Pressable
-              onPress={savePhone}
-              disabled={savingPhone || normalizePhone(phone) === profile?.phone_kr}
-              className={`h-12 items-center justify-center rounded-xl bg-primary px-5 ${
-                savingPhone || normalizePhone(phone) === profile?.phone_kr ? 'opacity-50' : ''
-              }`}
-            >
-              <Text className="font-semibold text-primary-foreground">{t('profile.save')}</Text>
-            </Pressable>
-          </View>
-        </View>
-
-        {/* Language */}
-        <View className="rounded-2xl bg-background p-4">
-          <View className="mb-3 flex-row items-center gap-2">
-            <Ionicons name="globe" size={18} color="#16a34a" />
-            <Text className="text-lg font-bold text-foreground">{t('profile.language')}</Text>
-          </View>
-          <View className="flex-row gap-2">
-            {(['ko', 'en'] as const).map((lng) => (
+        {/* 내 정보 */}
+        <GroupTitle>내 정보</GroupTitle>
+        <GroupCard>
+          <View style={{ paddingHorizontal: 14, paddingVertical: 12 }}>
+            <Text style={{ fontSize: 12, color: COLORS.ink[500], marginBottom: 6, fontWeight: '600' }}>
+              {t('profile.phone')}
+            </Text>
+            <View style={{ flexDirection: 'row', gap: 8 }}>
+              <TextInput
+                value={phone}
+                onChangeText={(v) => setPhone(formatPhone(v))}
+                keyboardType="phone-pad"
+                placeholder="010-1234-5678"
+                placeholderTextColor={COLORS.ink[300]}
+                style={[inputStyle, { flex: 1 }]}
+              />
               <Pressable
-                key={lng}
-                onPress={() => i18n.changeLanguage(lng)}
-                className={`flex-1 items-center rounded-xl border py-2.5 ${
-                  i18n.language === lng ? 'border-primary bg-primary/10' : 'border-border'
-                }`}
+                onPress={savePhone}
+                disabled={savingPhone || normalizePhone(phone) === profile?.phone_kr}
+                style={({ pressed }) => ({
+                  height: 46,
+                  paddingHorizontal: 18,
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  borderRadius: 12,
+                  backgroundColor: COLORS.teal[700],
+                  opacity:
+                    savingPhone || normalizePhone(phone) === profile?.phone_kr
+                      ? 0.5
+                      : pressed
+                        ? 0.92
+                        : 1,
+                })}
               >
-                <Text className={i18n.language === lng ? 'font-bold text-primary' : 'text-foreground'}>
-                  {lng === 'ko' ? '한국어' : 'English'}
+                <Text style={{ color: 'white', fontWeight: '600', fontSize: 13.5 }}>
+                  {t('profile.save')}
                 </Text>
               </Pressable>
-            ))}
+            </View>
           </View>
-        </View>
+        </GroupCard>
 
-        {/* Vitals settings */}
-        <View className="rounded-2xl bg-background p-4">
-          <View className="mb-3 flex-row items-center gap-2">
-            <Ionicons name="pulse" size={18} color="#ef4444" />
-            <Text className="text-lg font-bold text-foreground">{t('profile.vitals_settings')}</Text>
+        {/* 언어 */}
+        <GroupTitle>{t('profile.language')}</GroupTitle>
+        <GroupCard>
+          <View style={{ paddingHorizontal: 14, paddingVertical: 12, flexDirection: 'row', gap: 8 }}>
+            {(['ko', 'en'] as const).map((lng) => {
+              const active = i18n.language === lng;
+              return (
+                <Pressable
+                  key={lng}
+                  onPress={() => i18n.changeLanguage(lng)}
+                  style={{
+                    flex: 1,
+                    alignItems: 'center',
+                    paddingVertical: 10,
+                    borderRadius: 12,
+                    borderWidth: 1,
+                    borderColor: active ? COLORS.teal[700] : COLORS.lineSoft,
+                    backgroundColor: active ? COLORS.teal[100] : 'transparent',
+                  }}
+                >
+                  <Text
+                    style={{
+                      color: active ? COLORS.teal[800] : COLORS.ink[700],
+                      fontWeight: active ? '700' : '500',
+                      fontSize: 14,
+                    }}
+                  >
+                    {lng === 'ko' ? '한국어' : 'English'}
+                  </Text>
+                </Pressable>
+              );
+            })}
           </View>
-          {VITAL_KEYS.map((v) => (
-            <View key={v.key} className="flex-row items-center justify-between py-1.5">
-              <Text className="text-base text-foreground">{v.label}</Text>
+        </GroupCard>
+
+        {/* 건강수치 표시 */}
+        <GroupTitle>{t('profile.vitals_settings')}</GroupTitle>
+        <GroupCard>
+          {VITAL_KEYS.map((v, i) => (
+            <View
+              key={v.key}
+              style={{
+                flexDirection: 'row',
+                alignItems: 'center',
+                gap: 12,
+                paddingHorizontal: 14,
+                paddingVertical: 10,
+                borderBottomWidth: i < VITAL_KEYS.length - 1 ? 1 : 0,
+                borderBottomColor: COLORS.lineSoft,
+              }}
+            >
+              <View
+                style={{
+                  width: 28,
+                  height: 28,
+                  borderRadius: 9,
+                  backgroundColor: COLORS.cream[100],
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                }}
+              >
+                <Ionicons name="pulse" size={14} color={COLORS.rose[500]} />
+              </View>
+              <Text style={{ flex: 1, fontSize: 14, fontWeight: '500', color: COLORS.ink[900] }}>
+                {v.label}
+              </Text>
               <Switch
                 value={vitals[v.key] ?? true}
                 onValueChange={(val) => toggleVital(v.key, val)}
-                trackColor={{ true: '#16a34a' }}
+                trackColor={{ true: COLORS.teal[700], false: COLORS.ink[300] }}
+                thumbColor="#ffffff"
               />
             </View>
           ))}
-        </View>
+        </GroupCard>
 
-        {/* Legal */}
-        <View className="overflow-hidden rounded-2xl bg-background">
+        {/* 약관 및 정책 */}
+        <GroupTitle>약관 및 정책</GroupTitle>
+        <GroupCard>
           {(
             [
               { label: '이용약관', path: '/legal/terms' },
               { label: '개인정보처리방침', path: '/legal/privacy' },
               { label: '민감정보 수집 및 이용 동의', path: '/legal/sensitive' },
             ] as const
-          ).map((item, i) => (
-            <Pressable
+          ).map((item, i, arr) => (
+            <SettingRow
               key={item.path}
+              icon="document-text-outline"
+              label={item.label}
               onPress={() => router.push(item.path)}
-              className={`flex-row items-center justify-between p-4 ${
-                i > 0 ? 'border-t border-border' : ''
-              }`}
-            >
-              <Text className="text-base text-foreground">{item.label}</Text>
-              <Ionicons name="chevron-forward" size={18} color="#a1a1aa" />
-            </Pressable>
+              showChevron
+              showDivider={i < arr.length - 1}
+            />
           ))}
-        </View>
+        </GroupCard>
 
-        {/* Sign out / delete */}
-        <Pressable
-          onPress={handleSignOut}
-          className="h-12 flex-row items-center justify-center gap-2 rounded-xl bg-background"
-        >
-          <Ionicons name="log-out-outline" size={20} color="#71717a" />
-          <Text className="text-base font-medium text-muted-foreground">{t('profile.signout')}</Text>
-        </Pressable>
-        <Pressable
-          onPress={handleDelete}
-          className="h-12 flex-row items-center justify-center gap-2 rounded-xl"
-        >
-          <Ionicons name="warning-outline" size={20} color="#ef4444" />
-          <Text className="text-base font-medium text-destructive">계정 삭제</Text>
-        </Pressable>
+        {/* Account */}
+        <GroupTitle>계정</GroupTitle>
+        <GroupCard>
+          <Pressable onPress={handleSignOut}>
+            <View
+              style={{
+                flexDirection: 'row',
+                alignItems: 'center',
+                gap: 12,
+                paddingHorizontal: 14,
+                paddingVertical: 13,
+                borderBottomWidth: 1,
+                borderBottomColor: COLORS.lineSoft,
+              }}
+            >
+              <View
+                style={{
+                  width: 28,
+                  height: 28,
+                  borderRadius: 9,
+                  backgroundColor: COLORS.cream[100],
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                }}
+              >
+                <Ionicons name="log-out-outline" size={16} color={COLORS.ink[700]} />
+              </View>
+              <Text style={{ flex: 1, fontSize: 14, fontWeight: '500', color: COLORS.ink[900] }}>
+                {t('profile.signout')}
+              </Text>
+              <Ionicons name="chevron-forward" size={16} color={COLORS.ink[300]} />
+            </View>
+          </Pressable>
+          <Pressable onPress={handleDelete}>
+            <View
+              style={{
+                flexDirection: 'row',
+                alignItems: 'center',
+                gap: 12,
+                paddingHorizontal: 14,
+                paddingVertical: 13,
+              }}
+            >
+              <View
+                style={{
+                  width: 28,
+                  height: 28,
+                  borderRadius: 9,
+                  backgroundColor: COLORS.rose[100],
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                }}
+              >
+                <Ionicons name="trash-outline" size={16} color={COLORS.danger} />
+              </View>
+              <Text style={{ flex: 1, fontSize: 14, fontWeight: '500', color: COLORS.danger }}>
+                계정 삭제
+              </Text>
+              <Ionicons name="chevron-forward" size={16} color={COLORS.ink[300]} />
+            </View>
+          </Pressable>
+        </GroupCard>
 
-        <Text className="mt-1 text-center text-xs text-muted-foreground">
-          CareNow · React Native · Phase 1
+        <Text
+          style={{
+            marginTop: 14,
+            textAlign: 'center',
+            fontSize: 11,
+            color: COLORS.ink[400],
+          }}
+        >
+          Bodacare
         </Text>
       </ScrollView>
     </SafeAreaView>

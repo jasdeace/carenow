@@ -1,0 +1,25 @@
+<svg width="1024" height="1024" viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#ffffff" stop-opacity="0.10" />
+      <stop offset="1" stop-color="#000000" stop-opacity="0.05" />
+    </linearGradient>
+  </defs>
+  <!-- iOS adds the rounded corners; we fill the full canvas with teal -->
+  <rect x="0" y="0" width="1024" height="1024" fill="#0F766E" />
+  <rect x="0" y="0" width="1024" height="1024" fill="url(#bg)" />
+  <!-- Pill capsule, rotated -32deg, centered.
+       Original logo.jsx had pill 44x18 in a 64-unit viewBox; scale 16x: 704x288. -->
+  <g transform="translate(512 512) rotate(-32) translate(-352 -144)">
+    <rect x="0" y="0" width="704" height="288" rx="144" fill="#FAF7F1" />
+    <!-- Right half coral -->
+    <path d="M352 0 H704 a144 144 0 0 1 144 144 v0 a144 144 0 0 1 -144 144 H352 Z"
+          fill="#E8927C" transform="translate(-144 0)" />
+    <!-- Center notch -->
+    <rect x="336" y="0" width="32" height="288" fill="#0F2C2E" fill-opacity="0.10" />
+    <!-- Heartbeat -->
+    <path d="M80 144 L208 144 L256 64 L320 224 L384 112 L448 144 L640 144"
+          fill="none" stroke="#0F2C2E" stroke-opacity="0.85" stroke-width="26"
+          stroke-linecap="round" stroke-linejoin="round" />
+  </g>
+</svg>

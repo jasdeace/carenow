@@ -13,6 +13,7 @@ import { useTranslation } from 'react-i18next';
 
 import { supabase } from '@/lib/supabase';
 import { normalizePhone, formatPhone } from '@/lib/phoneUtils';
+import { BrandMark } from '@/components/ui/BrandMark';
 
 export default function Login() {
   const { t } = useTranslation();
@@ -44,12 +45,22 @@ export default function Login() {
       <View className="flex-1 items-center justify-center px-6">
         {/* Brand */}
         <View className="mb-10 items-center">
-          <View className="mb-4 h-20 w-20 items-center justify-center rounded-3xl bg-primary shadow-xl">
-            <Text className="text-3xl font-extrabold text-primary-foreground">C</Text>
+          <View
+            className="mb-4"
+            style={{
+              shadowColor: '#0F2C2E',
+              shadowOpacity: 0.18,
+              shadowRadius: 16,
+              shadowOffset: { width: 0, height: 8 },
+              elevation: 6,
+              borderRadius: 22,
+            }}
+          >
+            <BrandMark size={80} />
           </View>
-          <Text className="text-4xl font-extrabold tracking-tight text-primary">CareLink</Text>
+          <Text className="text-4xl font-extrabold tracking-tight text-primary">Bodacare</Text>
           <Text className="mt-1 text-sm font-medium text-muted-foreground">
-            Care Circle Connection & Med Management
+            내 건강 동반자
           </Text>
         </View>
 
@@ -65,7 +76,7 @@ export default function Login() {
             placeholder={t('auth.phone_placeholder')}
             placeholderTextColor="#a1a1aa"
             keyboardType="phone-pad"
-            className="mb-4 h-14 rounded-xl border border-border px-4 text-lg text-foreground"
+            className="mb-4 h-14 rounded-xl border border-border px-4 text-center text-lg text-foreground"
           />
 
           <Text className="mb-1.5 text-sm font-medium text-foreground">{t('auth.password')}</Text>
@@ -73,7 +84,7 @@ export default function Login() {
             value={password}
             onChangeText={setPassword}
             secureTextEntry
-            className="mb-4 h-14 rounded-xl border border-border px-4 text-lg text-foreground"
+            className="mb-4 h-14 rounded-xl border border-border px-4 text-center text-lg text-foreground"
           />
 
           {error && <Text className="mb-3 text-sm text-destructive">{error}</Text>}

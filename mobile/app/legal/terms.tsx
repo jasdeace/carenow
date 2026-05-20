@@ -1,18 +1,18 @@
 import { LegalDoc, type LegalSection } from '@/components/LegalDoc';
 
-// NOTE: replace [연락처 이메일] with a real support email before App Store submission.
 const sections: LegalSection[] = [
   {
     heading: '제1조 (목적)',
     body: [
-      "본 약관은 'CareNow'(이하 \"서비스\")가 제공하는 복약 관리, 건강 지표 기록 및 AI 상담 서비스의 이용 조건과 절차, 운영자와 회원 간의 권리·의무 및 책임 사항을 규정함을 목적으로 합니다.",
+      "본 약관은 'Bodacare'(이하 \"서비스\")가 제공하는 복약 관리, 건강 지표 기록 및 AI 상담 서비스의 이용 조건과 절차, 운영자와 회원 간의 권리·의무 및 책임 사항을 규정함을 목적으로 합니다.",
     ],
   },
   {
     heading: '제2조 (운영자 정보)',
     body: [
-      '서비스는 개인 개발자 Won Seok Chang(이하 "운영자")가 운영합니다.',
-      '문의: [연락처 이메일]',
+      '서비스는 Bodacare 운영자(이하 "운영자")가 운영합니다.',
+      '문의: admin@bodacare.com',
+      '웹사이트: https://bodacare.com',
     ],
   },
   {
@@ -73,5 +73,5 @@ const sections: LegalSection[] = [
 ];
 
 export default function TermsOfServiceScreen() {
-  return <LegalDoc title="이용약관" sections={sections} updated="2026년 5월 19일" />;
+  return <LegalDoc title="이용약관" sections={sections} updated="2026년 5월 20일" />;
 }
