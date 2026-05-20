@@ -224,7 +224,7 @@ export function NutriAddEntry({ open, onClose, onAdded, dateStr }: Props) {
                     </View>
                   ) : (
                     <View className="items-center gap-3 py-12">
-                      <ActivityIndicator size="large" color="#16a34a" />
+                      <ActivityIndicator size="large" color="#0F766E" />
                       <Text className="text-primary">AI가 음식을 분석하고 있습니다...</Text>
                     </View>
                   )}
@@ -235,15 +235,15 @@ export function NutriAddEntry({ open, onClose, onAdded, dateStr }: Props) {
                     onPress={() => analyzePhoto('camera')}
                     className="h-28 items-center justify-center gap-2 rounded-2xl border border-primary/40 bg-primary/5"
                   >
-                    <Ionicons name="camera" size={32} color="#16a34a" />
+                    <Ionicons name="camera" size={32} color="#0F766E" />
                     <Text className="text-base font-medium text-primary">카메라로 촬영</Text>
                   </Pressable>
                   <Pressable
                     onPress={() => analyzePhoto('library')}
-                    className="h-28 items-center justify-center gap-2 rounded-2xl border border-violet-300 bg-violet-50"
+                    className="h-28 items-center justify-center gap-2 rounded-2xl border border-coral-300 bg-coral-100"
                   >
-                    <Ionicons name="image" size={32} color="#8b5cf6" />
-                    <Text className="text-base font-medium text-violet-600">갤러리에서 선택</Text>
+                    <Ionicons name="image" size={32} color="#A85A45" />
+                    <Text className="text-base font-medium text-coral-500">갤러리에서 선택</Text>
                   </Pressable>
                   <Text className="text-center text-xs text-muted-foreground">
                     토큰 1개 차감 (잔여: {profile?.token_balance ?? 0}개)
@@ -256,8 +256,8 @@ export function NutriAddEntry({ open, onClose, onAdded, dateStr }: Props) {
           {tab === 'manual' && (
             <>
               {aiResult && (
-                <View className="rounded-xl border border-emerald-200 bg-emerald-50 p-3">
-                  <Text className="text-xs font-medium text-emerald-600">
+                <View className="rounded-xl border border-teal-200 bg-teal-50 p-3">
+                  <Text className="text-xs font-medium text-teal-700">
                     🤖 AI 분석 결과 (수정 가능)
                   </Text>
                   {aiResult.notes && (

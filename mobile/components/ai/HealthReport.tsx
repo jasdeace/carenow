@@ -161,7 +161,7 @@ export function HealthReport() {
   if (!loaded) {
     return (
       <View className="flex-1 items-center justify-center bg-secondary/40">
-        <ActivityIndicator color="#16a34a" />
+        <ActivityIndicator color="#0F766E" />
       </View>
     );
   }
@@ -235,8 +235,8 @@ export function HealthReport() {
                     <Section
                       title="잘 하고 있는 점"
                       icon="checkmark-circle"
-                      color="#16a34a"
-                      bg="bg-emerald-50"
+                      color="#0F766E"
+                      bg="bg-teal-50"
                       items={r.highlights}
                     />
                     <Section
@@ -265,7 +265,7 @@ export function HealthReport() {
                       onPress={() => openChat(r)}
                       className="flex-row items-center justify-center gap-2 rounded-xl bg-secondary py-3"
                     >
-                      <Ionicons name="chatbubble-ellipses" size={16} color="#16a34a" />
+                      <Ionicons name="chatbubble-ellipses" size={16} color="#0F766E" />
                       <Text className="text-sm font-medium text-foreground">
                         이 리포트에 대해 질문하기
                         {turns > 0 ? ` · ${turns}개 대화` : ''}
@@ -345,7 +345,7 @@ export function HealthReport() {
                     </View>
                   ))
                 )}
-                {chatting && <ActivityIndicator size="small" color="#16a34a" />}
+                {chatting && <ActivityIndicator size="small" color="#0F766E" />}
               </ScrollView>
 
               <View className="flex-row items-center gap-2 border-t border-border p-3">

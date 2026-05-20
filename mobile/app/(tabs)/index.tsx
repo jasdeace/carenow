@@ -2,9 +2,12 @@ import { useState } from 'react';
 import { View, Text, Pressable, ScrollView } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTranslation } from 'react-i18next';
+import Svg, { Path } from 'react-native-svg';
 
 import { TakerHome } from '@/components/home/TakerHome';
 import { GiverHome } from '@/components/home/GiverHome';
+import { useAuthStore } from '@/stores/authStore';
+import { COLORS } from '@/constants/design';
 
 const TABS = [
   { key: 'taker', labelKey: 'home.taker_tab' },
@@ -13,31 +16,98 @@ const TABS = [
 
 export default function Home() {
   const { t } = useTranslation();
+  const { profile } = useAuthStore();
   const [tab, setTab] = useState<'taker' | 'giver'>('taker');
+  const initial = (profile?.name_ko || profile?.email || '?').trim().charAt(0);
 
   return (
-    <SafeAreaView edges={['top']} className="flex-1 bg-secondary">
-      {/* Brand bar */}
-      <View className="flex-row items-center justify-center gap-2 bg-background pt-3">
-        <View className="h-7 w-7 items-center justify-center rounded-lg bg-primary">
-          <Text className="font-extrabold text-primary-foreground">C</Text>
+    <SafeAreaView edges={['top']} style={{ flex: 1, backgroundColor: COLORS.cream[50] }}>
+      {/* Top action row — bell + avatar */}
+      <View
+        style={{
+          flexDirection: 'row',
+          alignItems: 'center',
+          justifyContent: 'flex-end',
+          gap: 8,
+          paddingHorizontal: 20,
+          paddingTop: 8,
+          paddingBottom: 4,
+        }}
+      >
+        <Pressable
+          style={{
+            width: 36,
+            height: 36,
+            borderRadius: 12,
+            backgroundColor: COLORS.paper,
+            borderWidth: 1,
+            borderColor: COLORS.lineSoft,
+            alignItems: 'center',
+            justifyContent: 'center',
+          }}
+          accessibilityLabel="알림"
+        >
+          <Svg width={20} height={20} viewBox="0 0 24 24" fill="none">
+            <Path
+              d="M6 16V11a6 6 0 1 1 12 0v5l1.5 2h-15L6 16z"
+              stroke={COLORS.ink[700]}
+              strokeWidth={1.6}
+              strokeLinejoin="round"
+            />
+            <Path
+              d="M10 21a2 2 0 0 0 4 0"
+              stroke={COLORS.ink[700]}
+              strokeWidth={1.6}
+              strokeLinecap="round"
+            />
+          </Svg>
+        </Pressable>
+        <View
+          style={{
+            width: 32,
+            height: 32,
+            borderRadius: 16,
+            backgroundColor: COLORS.teal[100],
+            alignItems: 'center',
+            justifyContent: 'center',
+          }}
+        >
+          <Text style={{ color: COLORS.teal[800], fontWeight: '600', fontSize: 13 }}>
+            {initial}
+          </Text>
         </View>
-        <Text className="text-lg font-bold text-primary">CareLink</Text>
       </View>
 
-      {/* Tabs */}
-      <View className="bg-background px-4 pb-3 pt-2">
-        <View className="flex-row rounded-xl bg-secondary p-1">
+      {/* Taker / Giver segmented */}
+      <View style={{ paddingHorizontal: 20, paddingTop: 10, paddingBottom: 8 }}>
+        <View
+          style={{
+            flexDirection: 'row',
+            backgroundColor: COLORS.cream[100],
+            borderRadius: 14,
+            padding: 4,
+          }}
+        >
           {TABS.map((tabItem) => {
             const active = tab === tabItem.key;
             return (
               <Pressable
                 key={tabItem.key}
                 onPress={() => setTab(tabItem.key)}
-                className={`flex-1 items-center rounded-lg py-2 ${active ? 'bg-background shadow-sm' : ''}`}
+                style={{
+                  flex: 1,
+                  alignItems: 'center',
+                  paddingVertical: 8,
+                  borderRadius: 11,
+                  backgroundColor: active ? COLORS.paper : 'transparent',
+                }}
               >
                 <Text
-                  className={`text-base font-medium ${active ? 'text-primary' : 'text-muted-foreground'}`}
+                  style={{
+                    fontSize: 14,
+                    fontWeight: active ? '600' : '500',
+                    color: active ? COLORS.teal[700] : COLORS.ink[500],
+                  }}
                 >
                   {t(tabItem.labelKey)}
                 </Text>
@@ -47,7 +117,10 @@ export default function Home() {
         </View>
       </View>
 
-      <ScrollView contentContainerClassName="p-4 pb-8">
+      <ScrollView
+        contentContainerStyle={{ paddingHorizontal: 20, paddingTop: 12, paddingBottom: 32 }}
+        showsVerticalScrollIndicator={false}
+      >
         {tab === 'taker' ? <TakerHome /> : <GiverHome />}
       </ScrollView>
     </SafeAreaView>

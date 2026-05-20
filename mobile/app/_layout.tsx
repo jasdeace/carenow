@@ -5,6 +5,7 @@ import { useEffect } from 'react';
 import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import * as SplashScreen from 'expo-splash-screen';
+import { Text, TextInput } from 'react-native';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
@@ -12,6 +13,15 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { supabase } from '@/lib/supabase';
 import { useAuthStore } from '@/stores/authStore';
 import { notificationService } from '@/lib/notifications';
+
+// Cap iOS Dynamic Type scaling app-wide so tight medical layouts
+// (dose pills, hero card, tab labels) don't shred at 2-3x system sizes.
+// Accessibility users still get up to 20% larger text.
+const MAX_FONT_SCALE = 1.2;
+const TextAny = Text as unknown as { defaultProps?: { maxFontSizeMultiplier?: number } };
+const TextInputAny = TextInput as unknown as { defaultProps?: { maxFontSizeMultiplier?: number } };
+TextAny.defaultProps = { ...(TextAny.defaultProps || {}), maxFontSizeMultiplier: MAX_FONT_SCALE };
+TextInputAny.defaultProps = { ...(TextInputAny.defaultProps || {}), maxFontSizeMultiplier: MAX_FONT_SCALE };
 
 // Hold the splash until auth state is resolved.
 SplashScreen.preventAutoHideAsync();

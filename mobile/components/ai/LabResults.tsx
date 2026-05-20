@@ -244,7 +244,7 @@ export function LabResults() {
         </View>
 
         {loading ? (
-          <ActivityIndicator color="#16a34a" className="mt-12" />
+          <ActivityIndicator color="#0F766E" className="mt-12" />
         ) : labs.length === 0 ? (
           <View className="mt-6 items-center rounded-2xl border border-dashed border-border bg-background py-12">
             <Ionicons name="document-text-outline" size={44} color="#d4d4d8" />
@@ -262,12 +262,12 @@ export function LabResults() {
                     <Ionicons
                       name={isOpen ? 'chevron-up' : 'chevron-down'}
                       size={18}
-                      color="#16a34a"
+                      color="#0F766E"
                     />
                     <Text className="text-base font-semibold text-foreground">{lab.date}</Text>
                   </Pressable>
                   <Pressable onPress={() => openChat(lab)} className="p-1.5">
-                    <Ionicons name="chatbubble-ellipses" size={20} color="#16a34a" />
+                    <Ionicons name="chatbubble-ellipses" size={20} color="#0F766E" />
                   </Pressable>
                   <Pressable onPress={() => removeLab(lab.id)} className="p-1.5">
                     <Ionicons name="trash-outline" size={18} color="#ef4444" />
@@ -328,7 +328,7 @@ export function LabResults() {
             <SafeAreaView className="flex-1 bg-background" edges={['top', 'bottom']}>
             <View className="flex-row items-center justify-between border-b border-border px-4 py-3">
               <View className="flex-row items-center gap-2">
-                <Ionicons name="chatbubble-ellipses" size={20} color="#16a34a" />
+                <Ionicons name="chatbubble-ellipses" size={20} color="#0F766E" />
                 <Text className="text-lg font-bold text-foreground">AI 검사결과 분석</Text>
               </View>
               <Pressable onPress={() => setChatLab(null)}>
@@ -362,7 +362,7 @@ export function LabResults() {
                   </View>
                 </View>
               ))}
-              {chatting && <ActivityIndicator size="small" color="#16a34a" />}
+              {chatting && <ActivityIndicator size="small" color="#0F766E" />}
             </ScrollView>
 
             <View className="flex-row items-center gap-2 border-t border-border p-3">
@@ -402,7 +402,7 @@ export function LabResults() {
           <ScrollView contentContainerClassName="p-4 gap-4">
             {ocrLoading ? (
               <View className="items-center gap-3 py-12">
-                <ActivityIndicator size="large" color="#16a34a" />
+                <ActivityIndicator size="large" color="#0F766E" />
                 <Text className="text-primary">검사지를 분석하고 있습니다...</Text>
               </View>
             ) : !scanned ? (
@@ -411,15 +411,15 @@ export function LabResults() {
                   onPress={() => scanLab('camera')}
                   className="h-28 items-center justify-center gap-2 rounded-2xl border border-primary/40 bg-primary/5"
                 >
-                  <Ionicons name="camera" size={32} color="#16a34a" />
+                  <Ionicons name="camera" size={32} color="#0F766E" />
                   <Text className="text-base font-medium text-primary">카메라로 촬영</Text>
                 </Pressable>
                 <Pressable
                   onPress={() => scanLab('library')}
-                  className="h-28 items-center justify-center gap-2 rounded-2xl border border-violet-300 bg-violet-50"
+                  className="h-28 items-center justify-center gap-2 rounded-2xl border border-coral-300 bg-coral-100"
                 >
-                  <Ionicons name="image" size={32} color="#8b5cf6" />
-                  <Text className="text-base font-medium text-violet-600">갤러리에서 선택</Text>
+                  <Ionicons name="image" size={32} color="#A85A45" />
+                  <Text className="text-base font-medium text-coral-500">갤러리에서 선택</Text>
                 </Pressable>
               </View>
             ) : (

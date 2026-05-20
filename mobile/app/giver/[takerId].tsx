@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { View, Text, Pressable, ScrollView, TextInput, Modal, ActivityIndicator, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
@@ -7,6 +7,9 @@ import { format } from 'date-fns';
 
 import { useAuthStore } from '@/stores/authStore';
 import { api } from '@/lib/api';
+import { COLORS } from '@/constants/design';
+
+type Activity = { id: string; time: Date; desc: string };
 
 type Tab = 'overview' | 'health' | 'circle';
 
@@ -19,6 +22,7 @@ export default function GiverDashboard() {
   const [accepted, setAccepted] = useState(false);
   const [data, setData] = useState<any>(null);
   const [tab, setTab] = useState<Tab>('overview');
+  const [selectedDay, setSelectedDay] = useState<string | null>(null);
 
   // add-med form
   const [medName, setMedName] = useState('');
@@ -36,6 +40,19 @@ export default function GiverDashboard() {
   useEffect(() => {
     if (takerId) load();
   }, [takerId]);
+
+  const weekDays = useMemo((): { date: Date; ds: string; day: string; rate: number }[] => {
+    if (!data?.adherence) return [];
+    return data.adherence.map((entry: any, i: number) => {
+      const d = new Date();
+      d.setDate(d.getDate() - (data.adherence.length - 1 - i));
+      return { date: d, ds: d.toDateString(), day: entry.day, rate: entry.rate };
+    });
+  }, [data?.adherence]);
+
+  const todayDs = new Date().toDateString();
+  const activeDayDs = selectedDay || todayDs;
+  const dayActivities: Activity[] = data?.activitiesByDay?.[activeDayDs] ?? [];
 
   const load = async () => {
     if (!user?.id || !takerId) return;
@@ -63,22 +80,29 @@ export default function GiverDashboard() {
           ),
         ).length || 0;
 
-      const activities: any[] = [];
+      const activitiesByDay: Record<string, Activity[]> = {};
+      const push = (a: Activity) => {
+        const ds = a.time.toDateString();
+        (activitiesByDay[ds] ||= []).push(a);
+      };
       if (checkin)
-        activities.push({ id: 'chk', time: new Date(checkin.checked_in_at), desc: '체크인 완료' });
-      if (bp?.[0])
-        activities.push({
-          id: 'bp',
-          time: new Date(bp[0].measured_at || bp[0].created_at),
-          desc: `혈압 ${bp[0].systolic}/${bp[0].diastolic}`,
-        });
+        push({ id: 'chk', time: new Date(checkin.checked_in_at), desc: '체크인 완료' });
+      bp?.forEach((b: any) =>
+        push({
+          id: `bp-${b.id}`,
+          time: new Date(b.measured_at || b.created_at),
+          desc: `혈압 ${b.systolic}/${b.diastolic}`,
+        }),
+      );
       meds?.forEach((m: any) =>
         m.medication_logs?.forEach((l: any) => {
           if (l.status === 'taken')
-            activities.push({ id: `med-${l.id}`, time: new Date(l.taken_at), desc: `${m.name_ko} 복용` });
+            push({ id: `med-${l.id}`, time: new Date(l.taken_at), desc: `${m.name_ko} 복용` });
         }),
       );
-      activities.sort((a, b) => b.time.getTime() - a.time.getTime());
+      Object.values(activitiesByDay).forEach((arr) =>
+        arr.sort((a, b) => b.time.getTime() - a.time.getTime()),
+      );
 
       setData({
         checkinDone: !!checkin,
@@ -87,7 +111,7 @@ export default function GiverDashboard() {
         lastBP: bp?.[0] ? `${bp[0].systolic}/${bp[0].diastolic}` : '--/--',
         adherence: adherence || [],
         medications: meds || [],
-        activities,
+        activitiesByDay,
         takerUserId,
         name: taker.display_name_ko || '대상자',
       });
@@ -165,7 +189,7 @@ export default function GiverDashboard() {
   if (loading) {
     return (
       <SafeAreaView className="flex-1 items-center justify-center bg-background">
-        <ActivityIndicator color="#16a34a" />
+        <ActivityIndicator color="#0F766E" />
       </SafeAreaView>
     );
   }
@@ -248,58 +272,159 @@ export default function GiverDashboard() {
               <Text className="text-base font-bold text-white">약 복용 재촉하기</Text>
             </Pressable>
 
-            {data?.adherence?.length > 0 && (
-              <View className="rounded-2xl bg-background p-4 shadow-sm">
-                <Text className="mb-3 text-sm font-bold text-foreground">주간 복용률</Text>
-                <View className="flex-row justify-between">
-                  {data.adherence.map((entry: any, i: number) => {
-                    const [dn, ds] = entry.day.split(' ');
-                    const full = entry.rate === 100;
-                    const partial = entry.rate > 0 && entry.rate < 100;
+            {weekDays.length > 0 && (
+              <View
+                style={{
+                  backgroundColor: COLORS.paper,
+                  borderRadius: 18,
+                  borderWidth: 1,
+                  borderColor: COLORS.lineSoft,
+                  paddingHorizontal: 14,
+                  paddingVertical: 14,
+                }}
+              >
+                <View
+                  style={{
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    marginBottom: 12,
+                  }}
+                >
+                  <Text style={{ fontSize: 14, fontWeight: '700', color: COLORS.ink[900] }}>
+                    주간 활동
+                  </Text>
+                  <Text style={{ fontSize: 11, color: COLORS.ink[500] }}>
+                    날짜를 눌러 활동 보기
+                  </Text>
+                </View>
+
+                {/* Day strip */}
+                <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+                  {weekDays.map((wd) => {
+                    const [dayName, dateStr] = wd.day.split(' ');
+                    const isFull = wd.rate >= 100;
+                    const isHigh = wd.rate >= 60;
+                    const dotBg = isFull
+                      ? COLORS.teal[700]
+                      : isHigh
+                        ? COLORS.teal[200]
+                        : COLORS.sand[100];
+                    const dotFg = isFull
+                      ? 'white'
+                      : isHigh
+                        ? COLORS.teal[800]
+                        : COLORS.warn[500];
+                    const isActive = wd.ds === activeDayDs;
                     return (
-                      <View key={i} className="items-center gap-1">
-                        <Text className="text-[10px] text-muted-foreground">{dn}</Text>
+                      <Pressable
+                        key={wd.ds}
+                        onPress={() => setSelectedDay(wd.ds)}
+                        hitSlop={4}
+                        style={{ alignItems: 'center', gap: 6 }}
+                      >
+                        <Text style={{ fontSize: 11, color: COLORS.ink[500], fontWeight: '600' }}>
+                          {dayName}
+                        </Text>
                         <View
-                          className={`h-8 w-8 items-center justify-center rounded-full border-2 ${
-                            full
-                              ? 'border-primary bg-primary'
-                              : partial
-                                ? 'border-yellow-400 bg-yellow-100'
-                                : 'border-secondary bg-secondary'
-                          }`}
+                          style={{
+                            width: 34,
+                            height: 34,
+                            borderRadius: 17,
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            backgroundColor: dotBg,
+                            borderWidth: isActive ? 2 : 0,
+                            borderColor: COLORS.teal[700],
+                          }}
                         >
-                          {full ? (
-                            <Ionicons name="checkmark" size={14} color="#fff" />
-                          ) : (
-                            <Text className="text-[9px] text-muted-foreground">
-                              {partial ? entry.rate : '-'}
-                            </Text>
-                          )}
+                          <Text
+                            style={{
+                              color: dotFg,
+                              fontSize: 11,
+                              fontWeight: '600',
+                              fontVariant: ['tabular-nums'],
+                            }}
+                          >
+                            {wd.rate}
+                          </Text>
                         </View>
-                        <Text className="text-[9px] text-muted-foreground">{ds}</Text>
-                      </View>
+                        <Text style={{ fontSize: 10, color: COLORS.ink[400] }}>{dateStr}</Text>
+                      </Pressable>
                     );
                   })}
                 </View>
+
+                {/* Selected day activities */}
+                <View
+                  style={{
+                    marginTop: 14,
+                    paddingTop: 12,
+                    borderTopWidth: 1,
+                    borderTopColor: COLORS.lineSoft,
+                  }}
+                >
+                  <Text
+                    style={{
+                      fontSize: 12,
+                      color: COLORS.ink[500],
+                      fontWeight: '600',
+                      marginBottom: 8,
+                    }}
+                  >
+                    {format(new Date(activeDayDs), 'M월 d일')}{' '}
+                    {activeDayDs === todayDs ? '· 오늘' : ''} 활동
+                  </Text>
+                  {dayActivities.length > 0 ? (
+                    dayActivities.map((a) => (
+                      <View
+                        key={a.id}
+                        style={{
+                          flexDirection: 'row',
+                          alignItems: 'center',
+                          gap: 10,
+                          paddingVertical: 8,
+                          borderBottomWidth: 1,
+                          borderBottomColor: COLORS.lineSoft,
+                        }}
+                      >
+                        <View
+                          style={{
+                            width: 6,
+                            height: 6,
+                            borderRadius: 3,
+                            backgroundColor: COLORS.teal[700],
+                          }}
+                        />
+                        <Text style={{ flex: 1, fontSize: 13, color: COLORS.ink[900] }}>
+                          {a.desc}
+                        </Text>
+                        <Text
+                          style={{
+                            fontSize: 11,
+                            color: COLORS.ink[500],
+                            fontVariant: ['tabular-nums'],
+                          }}
+                        >
+                          {format(a.time, 'HH:mm')}
+                        </Text>
+                      </View>
+                    ))
+                  ) : (
+                    <Text
+                      style={{
+                        paddingVertical: 18,
+                        textAlign: 'center',
+                        fontSize: 12,
+                        color: COLORS.ink[500],
+                      }}
+                    >
+                      이 날의 기록이 없습니다.
+                    </Text>
+                  )}
+                </View>
               </View>
             )}
-
-            <View className="rounded-2xl bg-background p-4 shadow-sm">
-              <Text className="mb-2 text-sm font-bold text-foreground">활동 내역</Text>
-              {data?.activities?.length > 0 ? (
-                data.activities.map((a: any) => (
-                  <View key={a.id} className="flex-row items-center gap-2 border-b border-border/40 py-2">
-                    <View className="h-2 w-2 rounded-full bg-primary" />
-                    <Text className="flex-1 text-xs text-foreground">{a.desc}</Text>
-                    <Text className="text-[10px] text-muted-foreground">
-                      {format(a.time, 'MM/dd HH:mm')}
-                    </Text>
-                  </View>
-                ))
-              ) : (
-                <Text className="py-6 text-center text-xs text-muted-foreground">기록이 없습니다.</Text>
-              )}
-            </View>
           </>
         )}
 
@@ -371,11 +496,11 @@ export default function GiverDashboard() {
                       <Ionicons
                         name={med.is_active ? 'toggle' : 'toggle-outline'}
                         size={28}
-                        color={med.is_active ? '#16a34a' : '#a1a1aa'}
+                        color={med.is_active ? '#0F766E' : '#a1a1aa'}
                       />
                     </Pressable>
                     <Pressable onPress={() => openEdit(med)} className="p-1">
-                      <Ionicons name="pencil" size={16} color="#16a34a" />
+                      <Ionicons name="pencil" size={16} color="#0F766E" />
                     </Pressable>
                     <Pressable
                       onPress={async () => {

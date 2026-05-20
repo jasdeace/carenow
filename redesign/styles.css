@@ -1,0 +1,142 @@
+/* CareLink — design system tokens & global styles */
+
+:root {
+  /* Brand */
+  --teal-900: #0B3F3D;
+  --teal-800: #0E5C5A;
+  --teal-700: #0F766E;   /* primary */
+  --teal-600: #14857C;
+  --teal-500: #20A39A;
+  --teal-400: #4EC4BD;
+  --teal-300: #8FDDD7;
+  --teal-200: #BFEDE9;
+  --teal-100: #DDF4F1;
+  --teal-50:  #EDFAF8;
+
+  /* Ink */
+  --ink-900: #0F2C2E;
+  --ink-700: #2E4547;
+  --ink-500: #5C6F71;
+  --ink-400: #87979A;
+  --ink-300: #B3BFC1;
+
+  /* Surface */
+  --cream-50:  #FAF7F1;   /* page background */
+  --cream-100: #F3EEE3;
+  --cream-200: #E8E0CD;
+  --line:      #EBE5D6;
+  --line-soft: #F1ECDF;
+  --paper:     #FFFFFF;
+
+  /* Accents */
+  --coral-500: #E8927C;
+  --coral-300: #F3BFAE;
+  --coral-100: #FBE5DC;
+
+  --sand-500:  #D6A85F;
+  --sand-200:  #F4E3BD;
+  --sand-100:  #FBF1D9;
+
+  --rose-500:  #D85B66;
+  --rose-100:  #FBE3E5;
+
+  --sky-500:   #4B6FD1;
+  --sky-100:   #E2E8F8;
+
+  /* Status */
+  --ok-500:    #1F9A6E;
+  --ok-100:    #DDF1E7;
+  --warn-500:  #C99339;
+  --warn-100:  #F8EBCC;
+  --danger-500:#C84A4A;
+
+  /* Type */
+  --font-sans:  'Pretendard', 'Pretendard Variable', 'Apple SD Gothic Neo', -apple-system, BlinkMacSystemFont, 'Inter', sans-serif;
+  --font-serif: 'Pretendard', 'Pretendard Variable', 'Apple SD Gothic Neo', sans-serif; /* legacy alias */
+  --font-mono:  'JetBrains Mono', ui-monospace, monospace;
+
+  /* Radii */
+  --r-xs: 8px;
+  --r-sm: 12px;
+  --r-md: 16px;
+  --r-lg: 20px;
+  --r-xl: 28px;
+  --r-pill: 999px;
+
+  /* Shadow */
+  --shadow-card: 0 1px 2px rgba(15,44,46,0.04), 0 6px 16px -8px rgba(15,44,46,0.12);
+  --shadow-pop:  0 8px 24px -6px rgba(15,44,46,0.18);
+}
+
+* { box-sizing: border-box; }
+html, body { margin: 0; padding: 0; }
+body {
+  font-family: var(--font-sans);
+  color: var(--ink-900);
+  background: var(--cream-50);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+}
+
+/* utility classes used across artboards */
+.cl-screen {
+  width: 100%;
+  height: 100%;
+  background: var(--cream-50);
+  font-family: var(--font-sans);
+  color: var(--ink-900);
+  letter-spacing: -0.01em;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.cl-scroll { flex: 1; overflow-y: auto; -webkit-overflow-scrolling: touch; }
+.cl-scroll::-webkit-scrollbar { width: 0; height: 0; }
+
+.cl-h1 { font-family: var(--font-sans); font-weight: 700; font-size: 28px; line-height: 1.15; letter-spacing: -0.03em; }
+.cl-h2 { font-family: var(--font-sans); font-weight: 700; font-size: 22px; line-height: 1.2; letter-spacing: -0.025em; }
+.cl-num { font-family: var(--font-sans); font-feature-settings: 'lnum' 1, 'tnum' 1; letter-spacing: -0.02em; }
+
+.cl-card {
+  background: var(--paper);
+  border-radius: var(--r-lg);
+  border: 1px solid var(--line-soft);
+  box-shadow: var(--shadow-card);
+}
+
+.cl-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 10px;
+  border-radius: var(--r-pill);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.cl-btn-primary {
+  background: var(--teal-700);
+  color: white;
+  border: none;
+  border-radius: var(--r-md);
+  font-family: inherit;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  cursor: pointer;
+}
+.cl-btn-primary:active { background: var(--teal-800); }
+
+.cl-btn-ghost {
+  background: transparent;
+  color: var(--teal-700);
+  border: 1px solid var(--teal-200);
+  border-radius: var(--r-md);
+  font-family: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+/* Korean-friendly numerals using serif */
+.serif { font-family: var(--font-sans); }
+.tabular { font-variant-numeric: tabular-nums; }

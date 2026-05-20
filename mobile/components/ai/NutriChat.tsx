@@ -152,11 +152,11 @@ export function NutriChat({ todayEntries, dailySummary, onEntriesChanged }: Prop
       {/* Collapsed banner */}
       <Pressable
         onPress={() => setExpanded(true)}
-        className="rounded-2xl border border-violet-200 bg-violet-50 p-4"
+        className="rounded-2xl border border-coral-300 bg-coral-100 p-4"
       >
         <View className="flex-row items-center justify-between">
           <View className="flex-row items-center gap-2">
-            <Ionicons name="sparkles" size={18} color="#8b5cf6" />
+            <Ionicons name="sparkles" size={18} color="#A85A45" />
             <Text className="text-sm font-semibold text-foreground">AI 영양사</Text>
             <Text className="text-xs text-muted-foreground">
               · 토큰 {profile?.token_balance ?? 0}개
@@ -174,9 +174,9 @@ export function NutriChat({ todayEntries, dailySummary, onEntriesChanged }: Prop
         <SafeAreaProvider>
           <View className="flex-1 bg-background" style={{ paddingBottom: kbHeight }}>
             <SafeAreaView className="flex-1 bg-background" edges={['top', 'bottom']}>
-            <View className="flex-row items-center justify-between border-b border-border bg-violet-50 p-3">
+            <View className="flex-row items-center justify-between border-b border-border bg-coral-100 p-3">
               <View className="flex-row items-center gap-2">
-                <Ionicons name="sparkles" size={20} color="#8b5cf6" />
+                <Ionicons name="sparkles" size={20} color="#A85A45" />
                 <Text className="text-lg font-bold text-foreground">AI 영양사</Text>
                 <Text className="text-xs text-muted-foreground">
                   토큰 {profile?.token_balance ?? 0}개
@@ -215,12 +215,12 @@ export function NutriChat({ todayEntries, dailySummary, onEntriesChanged }: Prop
                   </View>
                 </View>
               ))}
-              {loading && <ActivityIndicator size="small" color="#8b5cf6" />}
+              {loading && <ActivityIndicator size="small" color="#A85A45" />}
 
               {/* Confirmation card — nothing is logged until the user taps 확인 */}
               {pending && (
-                <View className="rounded-2xl border border-violet-300 bg-violet-50 p-3">
-                  <Text className="mb-2 text-xs font-semibold text-violet-700">
+                <View className="rounded-2xl border border-coral-300 bg-coral-100 p-3">
+                  <Text className="mb-2 text-xs font-semibold text-coral-500">
                     아래 내용을 기록할까요?
                   </Text>
                   {pending.map((a, i) => (

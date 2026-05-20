@@ -75,7 +75,7 @@ export function GiverHome() {
   if (loading) {
     return (
       <View className="items-center py-16">
-        <ActivityIndicator color="#16a34a" />
+        <ActivityIndicator color="#0F766E" />
       </View>
     );
   }
@@ -134,7 +134,7 @@ export function GiverHome() {
       {/* Connect a new person */}
       <View className="rounded-2xl bg-background p-4 shadow-sm">
         <View className="mb-1 flex-row items-center gap-2">
-          <Ionicons name="person-add" size={18} color="#16a34a" />
+          <Ionicons name="person-add" size={18} color="#0F766E" />
           <Text className="text-base font-bold text-foreground">새 연결</Text>
         </View>
         <Text className="mb-3 text-sm text-muted-foreground">

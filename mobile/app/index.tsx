@@ -5,7 +5,7 @@ import { useAuthStore } from '@/stores/authStore';
 function Loader() {
   return (
     <View className="flex-1 items-center justify-center bg-background">
-      <ActivityIndicator color="#16a34a" />
+      <ActivityIndicator color="#0F766E" />
     </View>
   );
 }
