@@ -80,16 +80,20 @@ export const notificationService = {
     medId: string,
     medName: string,
     times: string[],
-  ): Promise<'ok' | 'denied' | 'unsupported' | 'error'> {
+  ): Promise<{ status: 'ok' | 'denied' | 'unsupported' | 'error'; error?: string }> {
     const N = getNotifications();
-    if (!N) return 'unsupported';
-    if (!(await ensurePermission(N))) return 'denied';
+    if (!N) return { status: 'unsupported' };
+    if (!(await ensurePermission(N))) return { status: 'denied' };
     try {
       for (const time of times) {
         const [hour, minute] = time.split(':').map(Number);
         if (Number.isNaN(hour) || Number.isNaN(minute)) continue;
+        // Notification identifiers must not contain ':' on some platforms,
+        // and stay deterministic per (medId, time) so cancelMedReminders
+        // can match them by prefix.
+        const id = `med-${medId}-${time.replace(':', '')}`;
         await N.scheduleNotificationAsync({
-          identifier: `med-${medId}-${time}`,
+          identifier: id,
           content: {
             title: '약 복용 시간',
             body: `${medName} 복용할 시간입니다.`,
@@ -104,10 +108,10 @@ export const notificationService = {
           },
         });
       }
-      return 'ok';
-    } catch (e) {
+      return { status: 'ok' };
+    } catch (e: any) {
       console.error('Schedule reminders failed:', e);
-      return 'error';
+      return { status: 'error', error: e?.message || String(e) };
     }
   },
 

@@ -15,6 +15,12 @@ const GOAL_LABEL: Record<string, string> = {
   gain: '근육 증가',
   maintain: '체중 유지',
 };
+const MEAL_LABEL: Record<string, string> = {
+  breakfast: '아침',
+  lunch: '점심',
+  dinner: '저녁',
+  snack: '간식',
+};
 
 function CalorieRing({ caloriesIn, target }: { caloriesIn: number; target: number }) {
   const r = 50;
@@ -51,6 +57,7 @@ export function NutriTrack() {
   const [showAdd, setShowAdd] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editCal, setEditCal] = useState('');
+  const [expandedId, setExpandedId] = useState<string | null>(null);
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [goal, setGoal] = useState<{
     goal_type: string | null;
@@ -186,16 +193,16 @@ export function NutriTrack() {
         </View>
 
         {/* Summary */}
-        <View className="flex-row items-center gap-5 rounded-2xl bg-emerald-50 p-5">
+        <View className="flex-row items-center gap-5 rounded-2xl bg-teal-50 p-5">
           <CalorieRing caloriesIn={caloriesIn} target={target} />
           <View className="flex-1 gap-2">
             <View className="flex-row justify-between">
               <Text className="text-xs text-muted-foreground">섭취</Text>
-              <Text className="text-sm font-bold text-emerald-600">{caloriesIn} kcal</Text>
+              <Text className="text-sm font-bold text-teal-700">{caloriesIn} kcal</Text>
             </View>
             <View className="flex-row justify-between">
               <Text className="text-xs text-muted-foreground">소모</Text>
-              <Text className="text-sm font-bold text-orange-500">{burned} kcal</Text>
+              <Text className="text-sm font-bold text-coral-500">{burned} kcal</Text>
             </View>
             <View className="flex-row justify-between border-t border-border pt-2">
               <Text className="text-xs font-medium text-foreground">순 칼로리</Text>
@@ -204,7 +211,7 @@ export function NutriTrack() {
             <Text className="text-[11px] text-muted-foreground">
               단백질 {protein.toFixed(0)}g · 탄수 {carbs.toFixed(0)}g · 지방 {fat.toFixed(0)}g
             </Text>
-            <Text className="text-[11px] font-medium text-emerald-700">
+            <Text className="text-[11px] font-medium text-teal-800">
               🎯 목표 {target} kcal
               {goal?.goal_type && GOAL_LABEL[goal.goal_type]
                 ? ` · ${GOAL_LABEL[goal.goal_type]}`
@@ -215,8 +222,8 @@ export function NutriTrack() {
 
         {/* Body composition — latest InBody record from the 건강수치 tab */}
         {bodyComp && (
-          <View className="flex-row items-center gap-3 rounded-2xl bg-violet-50 p-4">
-            <Ionicons name="body" size={22} color="#8b5cf6" />
+          <View className="flex-row items-center gap-3 rounded-2xl bg-coral-100 p-4">
+            <Ionicons name="body" size={22} color="#A85A45" />
             <View className="flex-1">
               <Text className="text-[11px] text-muted-foreground">체성분 · 건강수치</Text>
               <Text className="text-sm font-semibold text-foreground">
@@ -233,7 +240,7 @@ export function NutriTrack() {
           className="flex-row items-center justify-between rounded-xl bg-background p-3 shadow-sm"
         >
           <View className="flex-row items-center gap-2">
-            <Ionicons name="trending-up" size={16} color="#16a34a" />
+            <Ionicons name="trending-up" size={16} color="#0F766E" />
             <Text className="text-sm font-medium text-foreground">주간 기록</Text>
           </View>
           <Ionicons name={showWeekly ? 'chevron-up' : 'chevron-down'} size={16} color="#a1a1aa" />
@@ -250,7 +257,7 @@ export function NutriTrack() {
                     <Text className="text-[9px] text-muted-foreground">{d.caloriesIn || '-'}</Text>
                     <View
                       style={{ height: `${h}%` }}
-                      className={`w-5 rounded-t ${today ? 'bg-emerald-500' : 'bg-emerald-300'}`}
+                      className={`w-5 rounded-t ${today ? 'bg-teal-500' : 'bg-teal-300'}`}
                     />
                     <Text className="text-[10px] text-muted-foreground">
                       {KO_DAYS[new Date(d.date).getDay()]}
@@ -272,72 +279,124 @@ export function NutriTrack() {
             <Text className="mt-2 text-sm text-muted-foreground">아직 기록이 없습니다</Text>
           </View>
         ) : (
-          entries.map((entry) => (
-            <View
-              key={entry.id}
-              className="flex-row items-center gap-3 rounded-xl bg-background p-3 shadow-sm"
-            >
-              <View
-                className={`h-10 w-10 items-center justify-center rounded-xl ${
-                  entry.entry_type === 'meal' ? 'bg-emerald-100' : 'bg-orange-100'
-                }`}
+          entries.map((entry) => {
+            const isMeal = entry.entry_type === 'meal';
+            const isExpanded = expandedId === entry.id;
+            const hasMacros =
+              isMeal && (entry.protein_g || entry.carbs_g || entry.fat_g);
+            return (
+              <Pressable
+                key={entry.id}
+                onPress={() => setExpandedId(isExpanded ? null : entry.id)}
+                className="rounded-xl bg-background p-3 shadow-sm"
               >
-                <Ionicons
-                  name={entry.entry_type === 'meal' ? 'restaurant' : 'barbell'}
-                  size={18}
-                  color={entry.entry_type === 'meal' ? '#16a34a' : '#f97316'}
-                />
-              </View>
-              <View className="flex-1">
-                <Text className="text-sm font-medium text-foreground" numberOfLines={1}>
-                  {entry.description || entry.activity_name || '기록'}
-                </Text>
-                <Text className="text-xs text-muted-foreground">
-                  {entry.entry_type === 'activity' && entry.duration_minutes
-                    ? `${entry.duration_minutes}분`
-                    : ''}
-                </Text>
-              </View>
-              {editingId === entry.id ? (
-                <View className="flex-row items-center gap-1">
-                  <TextInput
-                    value={editCal}
-                    onChangeText={setEditCal}
-                    keyboardType="numeric"
-                    autoFocus
-                    className="h-8 w-16 rounded border border-border px-1 text-right text-sm text-foreground"
-                  />
-                  <Pressable onPress={() => saveEdit(entry.id)}>
-                    <Ionicons name="checkmark" size={20} color="#16a34a" />
-                  </Pressable>
-                </View>
-              ) : (
-                <View className="flex-row items-center gap-1">
-                  <Text
-                    className={`text-sm font-bold ${
-                      entry.entry_type === 'activity' ? 'text-orange-500' : 'text-emerald-600'
+                <View className="flex-row items-center gap-3">
+                  <View
+                    className={`h-10 w-10 items-center justify-center rounded-xl ${
+                      isMeal ? 'bg-teal-100' : 'bg-sand-100'
                     }`}
                   >
-                    {entry.entry_type === 'activity' ? '-' : ''}
-                    {Math.abs(entry.calories)} kcal
-                  </Text>
-                  <Pressable
-                    onPress={() => {
-                      setEditingId(entry.id);
-                      setEditCal(String(Math.abs(entry.calories)));
-                    }}
-                    hitSlop={8}
-                    className="ml-1 p-2"
-                  >
-                    <Ionicons name="pencil" size={16} color="#a1a1aa" />
-                  </Pressable>
-                  <Pressable onPress={() => removeEntry(entry.id)} hitSlop={8} className="p-2">
-                    <Ionicons name="trash-outline" size={16} color="#ef4444" />
-                  </Pressable>
+                    <Ionicons
+                      name={isMeal ? 'restaurant' : 'barbell'}
+                      size={18}
+                      color={isMeal ? '#0F766E' : '#E8927C'}
+                    />
+                  </View>
+                  <View className="flex-1">
+                    <Text className="text-sm font-medium text-foreground" numberOfLines={1}>
+                      {entry.description || entry.activity_name || '기록'}
+                    </Text>
+                    <Text className="text-xs text-muted-foreground">
+                      {isMeal && entry.meal_type
+                        ? MEAL_LABEL[entry.meal_type] || entry.meal_type
+                        : !isMeal && entry.duration_minutes
+                          ? `${entry.duration_minutes}분`
+                          : ''}
+                    </Text>
+                  </View>
+                  {editingId === entry.id ? (
+                    <View className="flex-row items-center gap-1">
+                      <TextInput
+                        value={editCal}
+                        onChangeText={setEditCal}
+                        keyboardType="numeric"
+                        autoFocus
+                        className="h-8 w-16 rounded border border-border px-1 text-right text-sm text-foreground"
+                      />
+                      <Pressable onPress={() => saveEdit(entry.id)}>
+                        <Ionicons name="checkmark" size={20} color="#0F766E" />
+                      </Pressable>
+                    </View>
+                  ) : (
+                    <View className="flex-row items-center gap-1">
+                      <Text
+                        className={`text-sm font-bold ${
+                          isMeal ? 'text-teal-700' : 'text-coral-500'
+                        }`}
+                      >
+                        {!isMeal ? '-' : ''}
+                        {Math.abs(entry.calories)} kcal
+                      </Text>
+                      {hasMacros ? (
+                        <Ionicons
+                          name={isExpanded ? 'chevron-up' : 'chevron-down'}
+                          size={16}
+                          color="#a1a1aa"
+                          style={{ marginLeft: 4 }}
+                        />
+                      ) : null}
+                      <Pressable
+                        onPress={(ev) => {
+                          ev.stopPropagation();
+                          setEditingId(entry.id);
+                          setEditCal(String(Math.abs(entry.calories)));
+                        }}
+                        hitSlop={8}
+                        className="ml-1 p-2"
+                      >
+                        <Ionicons name="pencil" size={16} color="#a1a1aa" />
+                      </Pressable>
+                      <Pressable
+                        onPress={(ev) => {
+                          ev.stopPropagation();
+                          removeEntry(entry.id);
+                        }}
+                        hitSlop={8}
+                        className="p-2"
+                      >
+                        <Ionicons name="trash-outline" size={16} color="#ef4444" />
+                      </Pressable>
+                    </View>
+                  )}
                 </View>
-              )}
-            </View>
-          ))
+                {isExpanded && hasMacros && (
+                  <View className="mt-3 flex-row gap-2 border-t border-border pt-3">
+                    <View className="flex-1 items-center rounded-lg bg-teal-50 py-2">
+                      <Text className="text-[10px] text-muted-foreground">단백질</Text>
+                      <Text className="text-sm font-bold text-teal-800">
+                        {Number(entry.protein_g || 0).toFixed(0)}
+                        <Text className="text-[10px] text-muted-foreground"> g</Text>
+                      </Text>
+                    </View>
+                    <View className="flex-1 items-center rounded-lg bg-amber-50 py-2">
+                      <Text className="text-[10px] text-muted-foreground">탄수화물</Text>
+                      <Text className="text-sm font-bold text-amber-700">
+                        {Number(entry.carbs_g || 0).toFixed(0)}
+                        <Text className="text-[10px] text-muted-foreground"> g</Text>
+                      </Text>
+                    </View>
+                    <View className="flex-1 items-center rounded-lg bg-rose-50 py-2">
+                      <Text className="text-[10px] text-muted-foreground">지방</Text>
+                      <Text className="text-sm font-bold text-rose-700">
+                        {Number(entry.fat_g || 0).toFixed(0)}
+                        <Text className="text-[10px] text-muted-foreground"> g</Text>
+                      </Text>
+                    </View>
+                  </View>
+                )}
+              </Pressable>
+            );
+          })
         )}
 
         {isToday && (

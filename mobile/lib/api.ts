@@ -45,9 +45,9 @@ export const api = {
     return data
   },
 
-  addMedication: async (userId: string, name_ko: string, dosage_amount: string, dosage_unit: string, createdBy: string, scheduleTimes: string[] = ['09:00'], isActive: boolean = true) => {
-    console.log('API: addMedication payload:', { userId, name_ko, dosage_amount, dosage_unit, createdBy, scheduleTimes, isActive });
-    
+  addMedication: async (userId: string, name_ko: string, dosage_amount: string, dosage_unit: string, createdBy: string, scheduleTimes: string[] = ['09:00'], isActive: boolean = true, mfdsItemSeq: string | null = null) => {
+    console.log('API: addMedication payload:', { userId, name_ko, dosage_amount, dosage_unit, createdBy, scheduleTimes, isActive, mfdsItemSeq });
+
     // 1. Insert Medication
     const { data: medData, error: medError } = await supabase
       .from('medications')
@@ -57,7 +57,8 @@ export const api = {
         dosage_amount,
         dosage_unit,
         is_active: isActive,
-        created_by: createdBy
+        created_by: createdBy,
+        mfds_item_seq: mfdsItemSeq,
       })
       .select()
       .single()
@@ -85,16 +86,17 @@ export const api = {
     console.log('API: addMedication SUCCESS');
   },
 
-  updateMedication: async (medId: string, name_ko: string, dosage_amount: string, dosage_unit: string, scheduleTimes: string[]) => {
-    console.log('API: updateMedication payload:', { medId, name_ko, dosage_amount, dosage_unit, scheduleTimes });
-    
+  updateMedication: async (medId: string, name_ko: string, dosage_amount: string, dosage_unit: string, scheduleTimes: string[], mfdsItemSeq: string | null = null) => {
+    console.log('API: updateMedication payload:', { medId, name_ko, dosage_amount, dosage_unit, scheduleTimes, mfdsItemSeq });
+
     // 1. Update Medication
     const { error: medError } = await supabase
       .from('medications')
       .update({
         name_ko: cleanDrugName(name_ko),
         dosage_amount,
-        dosage_unit
+        dosage_unit,
+        mfds_item_seq: mfdsItemSeq,
       })
       .eq('id', medId)
 
