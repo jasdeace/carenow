@@ -231,7 +231,7 @@ serve(async (req: Request) => {
       goal,
     }
 
-    const systemInstruction = `You are a careful health-coaching AI for the CareNow app.
+    const systemInstruction = `You are a careful health-coaching AI for the Bodacare app.
 Today is ${krDate(new Date())} (Asia/Seoul).
 
 You are given an aggregated 14–30 day snapshot of one user's health data:

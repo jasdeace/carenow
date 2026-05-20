@@ -41,7 +41,7 @@ serve(async (req: Request) => {
     const { event } = await req.json()
     if (!event?.type) return new Response('No event', { status: 400 })
 
-    // Only consumable token-pack purchases grant tokens here. CareNow Plus
+    // Only consumable token-pack purchases grant tokens here. Bodacare Plus
     // (subscription) access is handled client-side via the RevenueCat
     // entitlement, so subscription events are acknowledged and skipped.
     if (event.type !== 'NON_RENEWING_PURCHASE') {

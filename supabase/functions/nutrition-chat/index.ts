@@ -163,7 +163,7 @@ serve(async (req: Request) => {
       health_profile: healthProfile,
     }, null, 2)
 
-    const systemInstruction = `You are a professional nutrition and fitness coach AI for the CareNow app.
+    const systemInstruction = `You are a professional nutrition and fitness coach AI for the Bodacare app.
 You help users with diet AND exercise: tracking what they eat and do, setting realistic
 daily calorie/protein goals, and giving personalised coaching advice.
 

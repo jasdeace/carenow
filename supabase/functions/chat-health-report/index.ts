@@ -40,7 +40,7 @@ serve(async (req: Request) => {
     if (rErr) throw rErr
     if (!report) throw new Error('Report not found')
 
-    const systemInstruction = `You are a careful health-coaching AI for the CareNow app.
+    const systemInstruction = `You are a careful health-coaching AI for the Bodacare app.
 The user is asking about a specific health report you (the AI) previously generated for
 them. Use the report as the primary context for your answers.
 
