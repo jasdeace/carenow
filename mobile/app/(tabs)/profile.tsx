@@ -112,7 +112,9 @@ export default function Profile() {
       {
         nutrition_chat: 'AI 영양사 채팅',
         meal_analysis: '식단 사진 분석',
+        lab_scan: '검사결과 스캔',
         lab_consultation: '검사결과 상담',
+        health_report: '건강 리포트 분석',
         signup_bonus: '가입 보너스',
         admin_topup: '관리자 충전',
       }[r] || r

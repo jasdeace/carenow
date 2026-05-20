@@ -108,6 +108,11 @@ export function LabResults() {
   const [labDate, setLabDate] = useState('');
 
   const scanLab = async (source: 'camera' | 'library') => {
+    if (!user?.id) return;
+    if (profile?.tier !== 'premium' && (profile?.token_balance ?? 0) < 1) {
+      Alert.alert('토큰 부족', '검사지 스캔에는 토큰 1개가 필요합니다.');
+      return;
+    }
     const images = await pickImages(source, { quality: 0.85 });
     if (images.length === 0) return;
     setOcrLoading(true);
@@ -116,6 +121,8 @@ export function LabResults() {
       setScanned(result.parsedData ?? { rawTextSummary: result.rawText });
       const d = result.parsedData?.reportDate;
       setLabDate(d && /^\d{4}-\d{2}-\d{2}$/.test(d) ? d : new Date().toISOString().split('T')[0]);
+      // Charge only on success so failed scans don't burn tokens.
+      api.deductToken(user.id, 1, 'lab_scan').then(() => fetchProfile(user.id)).catch(() => {});
     } catch (e: any) {
       Alert.alert('인식 실패', e?.message || '다시 시도해주세요');
     } finally {
