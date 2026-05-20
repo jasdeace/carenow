@@ -93,6 +93,12 @@ export function NutriChat({ todayEntries, dailySummary, onEntriesChanged }: Prop
     };
   }, [expanded]);
 
+  // When the keyboard opens/closes it shrinks the chat panel — snap to the
+  // latest message so the user sees the most recent reply, not history.
+  useEffect(() => {
+    if (expanded) scrollRef.current?.scrollToEnd({ animated: true });
+  }, [kbHeight, expanded]);
+
   const send = async () => {
     if (!input.trim() || !user?.id || loading || pending) return;
     if ((profile?.token_balance ?? 0) < 1) {
@@ -186,6 +192,8 @@ export function NutriChat({ todayEntries, dailySummary, onEntriesChanged }: Prop
               className="flex-1"
               contentContainerClassName="p-4 gap-3"
               onContentSizeChange={() => scrollRef.current?.scrollToEnd({ animated: true })}
+              keyboardShouldPersistTaps="handled"
+              keyboardDismissMode="none"
             >
               {messages.map((m, i) => (
                 <View
