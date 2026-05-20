@@ -862,22 +862,29 @@ export const api = {
       | null
   },
 
-  // ============ HEALTH PROFILE (AI snapshot) ============
+  // ============ HEALTH PROFILE (AI snapshot history) ============
+  // Each generate call appends a new history row; UI shows them all and
+  // can chat about any specific one.
   getHealthProfile: async (userId: string) => {
     const { data, error } = await supabase
       .from('health_profile')
       .select('*')
       .eq('user_id', userId)
+      .order('generated_at', { ascending: false })
+      .limit(1)
       .maybeSingle()
     if (error) throw error
-    return data as {
-      highlights: string[]
-      risks: string[]
-      watch: string[]
-      next_actions: string[]
-      summary: string | null
-      updated_at: string
-    } | null
+    return data as HealthReport | null
+  },
+
+  getHealthProfileHistory: async (userId: string) => {
+    const { data, error } = await supabase
+      .from('health_profile')
+      .select('*')
+      .eq('user_id', userId)
+      .order('generated_at', { ascending: false })
+    if (error) throw error
+    return (data ?? []) as HealthReport[]
   },
 
   generateHealthProfile: async (userId: string) => {
@@ -885,7 +892,27 @@ export const api = {
       body: { userId },
     })
     if (error) throw error
-    return data
+    return data as HealthReport
   },
+
+  chatHealthReport: async (userId: string, profileId: string, prompt: string, history: any[]) => {
+    const { data, error } = await supabase.functions.invoke('chat-health-report', {
+      body: { userId, profileId, prompt, history },
+    })
+    if (error) throw error
+    return data as { text: string; chat_history: { role: 'user' | 'ai'; text: string }[] }
+  },
+}
+
+export type HealthReport = {
+  id: string
+  user_id: string
+  highlights: string[]
+  risks: string[]
+  watch: string[]
+  next_actions: string[]
+  summary: string | null
+  chat_history: { role: 'user' | 'ai'; text: string }[]
+  generated_at: string
 }
 

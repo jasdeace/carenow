@@ -38,8 +38,10 @@ serve(async (req: Request) => {
       )
       const { data } = await supabase
         .from('health_profile')
-        .select('highlights, risks, watch, next_actions, summary, updated_at')
+        .select('highlights, risks, watch, next_actions, summary, generated_at')
         .eq('user_id', userId)
+        .order('generated_at', { ascending: false })
+        .limit(1)
         .maybeSingle()
       healthProfile = data
     }

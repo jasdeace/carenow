@@ -141,10 +141,13 @@ serve(async (req: Request) => {
 
     // Persistent AI health snapshot (overall pattern across all features).
     // Lets the coach reference longer-term trends, not just today's numbers.
+    // health_profile is now a history table — pick the latest row.
     const { data: healthProfile } = await supabase
       .from('health_profile')
-      .select('highlights, risks, watch, next_actions, summary, updated_at')
+      .select('highlights, risks, watch, next_actions, summary, generated_at')
       .eq('user_id', userId)
+      .order('generated_at', { ascending: false })
+      .limit(1)
       .maybeSingle()
 
     const today = seoulDate(new Date())

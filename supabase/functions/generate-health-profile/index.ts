@@ -282,12 +282,14 @@ RESPONSE FORMAT — return ONLY this JSON, no markdown:
       watch: Array.isArray(parsed.watch) ? parsed.watch : [],
       next_actions: Array.isArray(parsed.next_actions) ? parsed.next_actions : [],
       summary: typeof parsed.summary === 'string' ? parsed.summary : null,
-      updated_at: new Date().toISOString(),
     }
 
+    // Insert (not upsert) — each analysis is a new history row, latest is
+    // simply `ORDER BY generated_at DESC LIMIT 1`. generated_at + id default
+    // on the DB side; chat_history starts as [].
     const { data: saved, error: upErr } = await supabase
       .from('health_profile')
-      .upsert(profile)
+      .insert(profile)
       .select()
       .single()
     if (upErr) throw upErr
